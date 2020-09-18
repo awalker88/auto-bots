@@ -10,7 +10,7 @@ def test_mase():
         abs(mase_test_df['prediction'] - mase_test_df['actuals']) / avg_shifted_error
     correct_error = mase_test_df['scaled_prediction_error'].mean()
 
-    test_error = mase(mase_test_df, 'prediction', 'actuals')
+    test_error = mase(mase_test_df, 'prediction', 'actuals', 1)
 
     print(mase_test_df)
     print(avg_shifted_error, correct_error, test_error)
