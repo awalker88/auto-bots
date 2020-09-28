@@ -1,0 +1,24 @@
+import warnings
+import pandas as pd
+
+
+def check_models(models):
+    if type(models) not in [tuple, list]:
+        raise TypeError('`models` argument must a list or tuple')
+
+    valid_models = ['auto_arima', 'exponential_smoothing', 'tbats']
+    if len(models) == 0:
+        raise KeyError(f'`models` argument must contain at least one of {valid_models}')
+
+    invalid_models = [model for model in models if model not in valid_models]
+    if len(invalid_models) > 0:
+        raise KeyError(f'The following models are not supported: {invalid_models}')
+
+    # if 'tbats' in models:
+    #     warnings.warn('`tbats` is a slow model, be prepared for longer runtimes will using it')
+
+
+def check_datetime_index(series_df: pd.DataFrame):
+    if not isinstance(series_df.index, pd.DatetimeIndex):
+        raise TypeError('The index of your dataframe must be a series of datetimes')
+
