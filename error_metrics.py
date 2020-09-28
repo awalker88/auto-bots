@@ -2,11 +2,11 @@ import pandas as pd
 
 
 def mse(data: pd.DataFrame, prediction: str, actuals: str):
-    pass
+    return ((data[prediction] - data[actuals]) ** 2).mean()
 
 
 def rmse(data: pd.DataFrame, prediction: str, actuals: str):
-    pass
+    return mse(data, prediction, actuals)
 
 
 def mape(data: pd.DataFrame, prediction: str, actuals: str):
