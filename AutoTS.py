@@ -18,20 +18,28 @@ import validation as val
 # todo: more basic models as options (ma, run_rate)
 # todo: make example notebook
 # todo: add dlm model
-# todo: have flexible options for predict (int for future only, start_date/end_date)
-# todo: have a fit model class that contains info about a fit model like it's name and error
 # todo: remove assumption that data is monthly
 # todo: consider whether to have dynamic=True when predicting in sample for auto_arima
 # todo: split up predict function to be like fit function
 # todo: have seasonal_period support multiple periods when training tbats
 
 class AutoTS:
+    """
+    Automatic modeler that finds the best time-series method to model your data
+    :param model_names: Models to consider when fitting. Currently supported models are
+    'auto_arima', 'exponential_smoothing', and 'tbats'. default=('auto_arima', 'exponential_smoothing')
+    :param error_metric: Which error metric to use when ranking models. Currently supported metrics
+    are 'mase', 'mse', and 'rmse'. default='mase'
+    :param seasonal_period: period of the data's seasonal trend. 3 would mean your data has quarterly
+    trends. None implies no seasonality. default=None
+    :param holdout_period: number of periods to leave out as a test set when comparing candidate models.
+    default=4
+    """
     def __init__(self,
                  model_names=('auto_arima', 'exponential_smoothing'),
-                 model_args: dict = None,
+                 # model_args: dict = None,
                  error_metric: str = 'mase',
-                 is_seasonal: bool = True,
-                 seasonal_period: int = 3,
+                 seasonal_period: int = None,
                  # seasonality_mode: str = 'm',
                  holdout_period: int = 4
                  ):
@@ -39,9 +47,9 @@ class AutoTS:
         val.check_models(model_names)
 
         self.model_names = [model.lower() for model in model_names]
-        self.model_args = model_args
+        # self.model_args = model_args
         self.error_metric = error_metric.lower()
-        self.is_seasonal = is_seasonal
+        self.is_seasonal = True if seasonal_period is not None else False
         self.seasonal_period = seasonal_period
         self.holdout_period = holdout_period
 
@@ -60,7 +68,16 @@ class AutoTS:
 
         warnings.filterwarnings('ignore', module='statsmodels')
 
-    def fit(self, data: pd.DataFrame, series_column_name: str, exogenous: list = None):
+    def fit(self, data: pd.DataFrame, series_column_name: str, exogenous: list = None) -> None:
+        """
+        Fit model to given training data
+
+        Note: exogenous variables are not yet supported
+        :param data:
+        :param series_column_name:
+        :param exogenous:
+        :return:
+        """
         val.check_datetime_index(data)
         self._set_input_data(data, series_column_name)
 
@@ -104,7 +121,8 @@ class AutoTS:
                            )
 
         test_predictions = pd.DataFrame({'actuals': self.testing_data[self.series_column_name],
-                                         'test_predictions': model.predict(n_periods=len(self.testing_data), exogenous=test_exog)})
+                                         'test_predictions': model.predict(n_periods=len(self.testing_data),
+                                                                           exogenous=test_exog)})
 
         test_error = self._error_metric(test_predictions, 'test_predictions', 'actuals')
 
@@ -192,14 +210,16 @@ class AutoTS:
         self.testing_data = data.iloc[-self.holdout_period:, :]
         self.series_column_name = series_column_name
 
-    def predict(self, start_date: dt.datetime, end_date: dt.datetime):
+    def predict(self, start_date: dt.datetime, end_date: dt.datetime) -> pd.Series:
         """
         Generates predictions (forecasts) for dates between start_date and end_date (inclusive).
-        :param start_date: date to begin forecast, must be either within the date range given during fit
-        or the month immediately following the last date given during fit
-        :param end_date:
-        :return:
+        :param start_date: date to begin forecast (inclusive), must be either within the date range
+        given during fit or the month immediately following the last date given during fit
+        :param end_date: date to end forecast (inclusive)
+        :return: A pandas Series of length equal to the number of months between start_date and
+        end_date. The series' will have a datetime index
         """
+        ### checks on data
         if not self.is_fitted:
             raise AttributeError('Model must be fitted to be able to make predictions. Use the '
                                  '`fit` method to fit before predicting')
@@ -224,7 +244,7 @@ class AutoTS:
         if start_date < self.data.index[0]:
             raise ValueError(f'`start_date` must be later than the earliest date received during fit')
 
-        # auto arima
+        ### auto arima
         if self.fit_model_type == 'auto_arima':
             # start date and end date are both in-sample
             if start_date < self.data.index[-1] and end_date <= self.data.index[-1]:
@@ -246,11 +266,11 @@ class AutoTS:
 
             return pd.Series(preds, index=pd.date_range(start_date, end_date, freq='MS'))
 
-        # exponential smoothing
+        ### exponential smoothing
         elif self.fit_model_type == 'exponential_smoothing':
             return self.fit_model.predict(start=start_date, end=end_date)
 
-        # tbats
+        ### tbats
         elif self.fit_model_type == 'tbats':
             in_sample_preds = pd.Series(self.fit_model.y_hat,
                                         index=pd.date_range(start=self.data.index[0],
