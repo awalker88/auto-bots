@@ -1,19 +1,17 @@
 import warnings
-from math import floor
 from dateutil.relativedelta import relativedelta
 import datetime as dt
 
 import pandas as pd
 import numpy as np
 from pmdarima import auto_arima
-from numpy import inf
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from error_metrics import mase
 # from fbprophet import Prophet
-import matplotlib.pyplot as plot
-from tbats import TBATS, BATS
+# import matplotlib.pyplot as plot
+from tbats import BATS
 
-from validate_inputs import validate_inputs
+import validation as val
 
 
 # todo: have user be able to access all models in addition to the one that works best
@@ -24,19 +22,21 @@ from validate_inputs import validate_inputs
 # todo: have a fit model class that contains info about a fit model like it's name and error
 # todo: remove assumption that data is monthly
 # todo: consider whether to have dynamic=True when predicting in sample for auto_arima
+# todo: split up predict function to be like fit function
+# todo: have seasonal_period support multiple periods when training tbats
 
 class AutoTS:
     def __init__(self,
-                 model_names=('auto_arima', 'exponential_smoothing', 'tbats', 'prophet', 'ensemble'),
+                 model_names=('auto_arima', 'exponential_smoothing'),
                  model_args: dict = None,
                  error_metric: str = 'mase',
                  is_seasonal: bool = True,
                  seasonal_period: int = 3,
-                 seasonality_mode: str = 'm',
+                 # seasonality_mode: str = 'm',
                  holdout_period: int = 4
                  ):
 
-        validate_inputs(model_names)
+        val.check_models(model_names)
 
         self.model_names = [model.lower() for model in model_names]
         self.model_args = model_args
@@ -56,10 +56,12 @@ class AutoTS:
         self.fit_model = None
         self.fit_model_type = None
         self.best_model_error = None
+        self.is_fitted = False
 
         warnings.filterwarnings('ignore', module='statsmodels')
 
     def fit(self, data: pd.DataFrame, series_column_name: str, exogenous: list = None):
+        val.check_datetime_index(data)
         self._set_input_data(data, series_column_name)
 
         if exogenous is not None:
@@ -77,6 +79,15 @@ class AutoTS:
         self.best_model_error = self.candidate_models[0][0]
         self.fit_model = self.candidate_models[0][1]
         self.fit_model_type = self.candidate_models[0][2]
+        self.is_fitted = True
+
+        # now that we know the best model, retrain it on all data
+        if self.fit_model_type == 'auto_arima':
+            self.fit_model = self._fit_auto_arima()[1]
+        elif self.fit_model_type == 'exponential_smoothing':
+            self.fit_model = self._fit_exponential_smoothing(use_full_dataset=True)[1]
+        elif self.fit_model_type == 'tbats':
+            self.fit_model = self._fit_tbats(use_full_dataset=True)[1]
 
     def _fit_auto_arima(self):
         train_exog = None
@@ -92,62 +103,58 @@ class AutoTS:
                            seasonal=self.is_seasonal, m=self.seasonal_period
                            )
 
-        predictions = pd.DataFrame({'actuals': self.testing_data[self.series_column_name],
-                                    'predictions': model.predict(n_periods=len(self.testing_data), exogenous=test_exog)})
+        test_predictions = pd.DataFrame({'actuals': self.testing_data[self.series_column_name],
+                                         'test_predictions': model.predict(n_periods=len(self.testing_data), exogenous=test_exog)})
 
-        error = self._error_metric(predictions, 'predictions', 'actuals')
+        test_error = self._error_metric(test_predictions, 'test_predictions', 'actuals')
 
         # now that we have train score, we'll want the fitted model to have all available data if it's chosen
         model.update(self.testing_data[self.series_column_name], exogenous=test_exog)
 
-        return [error, model, 'auto_arima']
+        return [test_error, model, 'auto_arima']
 
-    def _fit_exponential_smoothing(self, hypertune: bool = False):
-        params = {
-            'trend': ['add', 'mul'],
-            'is_seasonal': ['add', 'mul'],
-        }
-        if hypertune:
-            temp_df = self.data.copy()
-            lowest_error = inf
-            best_model = None
-            for trend in params['trend']:
-                for seasonal in params['is_seasonal']:
-                    es_model = ExponentialSmoothing(temp_df[self.series_column_name],
-                                                    seasonal_periods=self.seasonal_period,
-                                                    trend=trend,
-                                                    seasonal=seasonal,
-                                                    use_boxcox=False,
-                                                    initialization_method='estimated').fit()
-                    predictions = es_model.predict(start=0, end=len(temp_df) + 1)
-                    temp_df['prediction'] = predictions
-                    error = self._error_metric(temp_df, 'prediction', 'expense_plan_amount')
-                    if error < lowest_error:
-                        lowest_error = error
-                        best_model = es_model
-            return best_model
+    def _fit_exponential_smoothing(self, use_full_dataset: bool = False):
+        if use_full_dataset:
+            model_data = self.data
+        else:
+            model_data = self.training_data
 
-        best_model = ExponentialSmoothing(self.data[self.series_column_name],
-                                          seasonal_periods=self.seasonal_period,
-                                          trend='add',
-                                          seasonal='add',
-                                          use_boxcox=False,
-                                          initialization_method='estimated').fit()
+        model = ExponentialSmoothing(model_data[self.series_column_name],
+                                     seasonal_periods=self.seasonal_period,
+                                     trend='add',
+                                     seasonal='add',
+                                     use_boxcox=False,
+                                     initialization_method='estimated').fit()
 
-        predictions = pd.DataFrame({'actuals': self.testing_data[self.series_column_name],
-                                    'predictions': best_model.predict(len(self.training_data),
-                                                                      len(self.training_data) + self.holdout_period - 2)})
-        error = self._error_metric(predictions, 'predictions', 'actuals')
+        test_predictions = pd.DataFrame(
+            {'actuals': self.testing_data[self.series_column_name],
+             'test_predictions': model.predict(
+                 len(self.training_data), len(self.training_data) + self.holdout_period - 2
+             )})
 
-        return [error, best_model, 'exponential_smoothing']
+        error = self._error_metric(test_predictions, 'test_predictions', 'actuals')
 
-    def _fit_tbats(self):
-        model = BATS(
-            seasonal_periods=[3],
-            use_arma_errors=False,
-            use_box_cox=False
-        )
-        fitted_model = model.fit(self.training_data[self.series_column_name])
+        return [error, model, 'exponential_smoothing']
+
+    def _fit_tbats(self, use_full_dataset: bool = False, use_simple_model: bool = True):
+        if use_full_dataset:
+            model_data = self.data
+        else:
+            model_data = self.training_data
+
+        # turning off arma and box_cox cuts training time by about a third
+        if use_simple_model:
+            model = BATS(
+                seasonal_periods=[self.seasonal_period] + [6],
+                use_arma_errors=False,
+                use_box_cox=False
+            )
+        else:
+            model = BATS(
+                seasonal_periods=[self.seasonal_period] + [6],
+            )
+
+        fitted_model = model.fit(model_data[self.series_column_name])
         predictions = pd.DataFrame({'actuals': self.testing_data[self.series_column_name],
                                     'predictions': fitted_model.forecast(len(self.testing_data))})
         error = self._error_metric(predictions, 'predictions', 'actuals')
@@ -186,6 +193,17 @@ class AutoTS:
         self.series_column_name = series_column_name
 
     def predict(self, start_date: dt.datetime, end_date: dt.datetime):
+        """
+        Generates predictions (forecasts) for dates between start_date and end_date (inclusive).
+        :param start_date: date to begin forecast, must be either within the date range given during fit
+        or the month immediately following the last date given during fit
+        :param end_date:
+        :return:
+        """
+        if not self.is_fitted:
+            raise AttributeError('Model must be fitted to be able to make predictions. Use the '
+                                 '`fit` method to fit before predicting')
+
         # check inputs are datetimes
         if not (isinstance(start_date, dt.datetime) and isinstance(end_date, dt.datetime)):
             raise TypeError('Both `start_date` and `end_date` must be datetime objects')
@@ -198,32 +216,63 @@ class AutoTS:
         last_data_date = self.data.index[-1]
         if start_date > (last_data_date + relativedelta(months=+1)):
             raise ValueError(f'`start_date` must be no more than 1 month past the last date of data received'
-                             f' during fit". `start date` is currently '
+                             f' during fit". Received `start date` is '
                              f'{(start_date.year - last_data_date.year) * 12 + (start_date.month - last_data_date.month)}'
                              f'months after last date in data {last_data_date}')
 
+        # check that start date comes after first date in training
+        if start_date < self.data.index[0]:
+            raise ValueError(f'`start_date` must be later than the earliest date received during fit')
+
+        # auto arima
         if self.fit_model_type == 'auto_arima':
             # start date and end date are both in-sample
             if start_date < self.data.index[-1] and end_date <= self.data.index[-1]:
                 preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date),
-                                                         end=self.data.index.get_loc(start_date))
+                                                         end=self.data.index.get_loc(end_date))
 
             # start date is in-sample but end date is not
             elif start_date < self.data.index[-1] < end_date:
-                extra_months = (end_date.year - last_data_date.year) * 12 + (end_date.month - last_data_date.month)
+                num_extra_months = (end_date.year - last_data_date.year) * 12 + (end_date.month - last_data_date.month)
                 # get all in sample predictions and stitch them together with out of sample predictions
                 in_sample_preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date))
-                out_of_sample_preds = self.fit_model.predict(extra_months)
+                out_of_sample_preds = self.fit_model.predict(num_extra_months)
                 preds = np.concatenate([in_sample_preds, out_of_sample_preds])
 
             # only possible scenario at this point is start date is 1 month past last data date
-            months_to_predict = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
-            preds = self.fit_model.predict(months_to_predict)
+            else:
+                months_to_predict = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+                preds = self.fit_model.predict(months_to_predict)
+
             return pd.Series(preds, index=pd.date_range(start_date, end_date, freq='MS'))
 
+        # exponential smoothing
         elif self.fit_model_type == 'exponential_smoothing':
             return self.fit_model.predict(start=start_date, end=end_date)
 
-        return -1
+        # tbats
+        elif self.fit_model_type == 'tbats':
+            in_sample_preds = pd.Series(self.fit_model.y_hat,
+                                        index=pd.date_range(start=self.data.index[0],
+                                                            end=self.data.index[-1], freq='MS'))
+
+            # start date and end date are both in-sample
+            if start_date < in_sample_preds.index[-1] and end_date <= in_sample_preds.index[-1]:
+                preds = in_sample_preds.loc[start_date:end_date]
+
+            # start date is in-sample but end date is not
+            elif start_date < self.data.index[-1] < end_date:
+                num_extra_months = (end_date.year - last_data_date.year) * 12 + (end_date.month - last_data_date.month)
+                # get all in sample predictions and stitch them together with out of sample predictions
+                in_sample_portion = in_sample_preds.loc[start_date:]
+                out_of_sample_portion = self.fit_model.forecast(num_extra_months)
+                preds = np.concatenate([in_sample_portion, out_of_sample_portion])
+
+            # only possible scenario at this point is start date is 1 month past last data date
+            else:
+                months_to_predict = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+                preds = self.fit_model.predict(months_to_predict)
+
+            return pd.Series(preds, index=pd.date_range(start=start_date, end=end_date, freq='MS'))
 
 
