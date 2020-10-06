@@ -163,13 +163,13 @@ class AutoTS:
         # turning off arma and box_cox cuts training time by about a third
         if use_simple_model:
             model = BATS(
-                seasonal_periods=[self.seasonal_period] + [6],
+                seasonal_periods=[self.seasonal_period] + [6, 12],
                 use_arma_errors=False,
                 use_box_cox=False
             )
         else:
             model = BATS(
-                seasonal_periods=[self.seasonal_period] + [6],
+                seasonal_periods=[self.seasonal_period] + [6, 12],
             )
 
         fitted_model = model.fit(model_data[self.series_column_name])
@@ -210,6 +210,54 @@ class AutoTS:
         self.testing_data = data.iloc[-self.holdout_period:, :]
         self.series_column_name = series_column_name
 
+    def _predict_auto_arima(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime) -> pd.Series:
+        # start date and end date are both in-sample
+        if start_date < self.data.index[-1] and end_date <= self.data.index[-1]:
+            preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date),
+                                                     end=self.data.index.get_loc(end_date))
+
+        # start date is in-sample but end date is not
+        elif start_date < self.data.index[-1] < end_date:
+            num_extra_months = (end_date.year - last_data_date.year) * 12 + (end_date.month - last_data_date.month)
+            # get all in sample predictions and stitch them together with out of sample predictions
+            in_sample_preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date))
+            out_of_sample_preds = self.fit_model.predict(num_extra_months)
+            preds = np.concatenate([in_sample_preds, out_of_sample_preds])
+
+        # only possible scenario at this point is start date is 1 month past last data date
+        else:
+            months_to_predict = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+            preds = self.fit_model.predict(months_to_predict)
+
+        return pd.Series(preds, index=pd.date_range(start_date, end_date, freq='MS'))
+
+    def _predict_exponential_smoothing(self, start_date: dt.datetime, end_date: dt.datetime):
+        return self.fit_model.predict(start=start_date, end=end_date)
+
+    def _predict_tbats(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime):
+        in_sample_preds = pd.Series(self.fit_model.y_hat,
+                                    index=pd.date_range(start=self.data.index[0],
+                                                        end=self.data.index[-1], freq='MS'))
+
+        # start date and end date are both in-sample
+        if start_date < in_sample_preds.index[-1] and end_date <= in_sample_preds.index[-1]:
+            preds = in_sample_preds.loc[start_date:end_date]
+
+        # start date is in-sample but end date is not
+        elif start_date < self.data.index[-1] < end_date:
+            num_extra_months = (end_date.year - last_data_date.year) * 12 + (end_date.month - last_data_date.month)
+            # get all in sample predictions and stitch them together with out of sample predictions
+            in_sample_portion = in_sample_preds.loc[start_date:]
+            out_of_sample_portion = self.fit_model.forecast(num_extra_months)
+            preds = np.concatenate([in_sample_portion, out_of_sample_portion])
+
+        # only possible scenario at this point is start date is 1 month past last data date
+        else:
+            months_to_predict = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+            preds = self.fit_model.forecast(months_to_predict)
+
+        return pd.Series(preds, index=pd.date_range(start=start_date, end=end_date, freq='MS'))
+
     def predict(self, start_date: dt.datetime, end_date: dt.datetime) -> pd.Series:
         """
         Generates predictions (forecasts) for dates between start_date and end_date (inclusive).
@@ -246,53 +294,15 @@ class AutoTS:
 
         ### auto arima
         if self.fit_model_type == 'auto_arima':
-            # start date and end date are both in-sample
-            if start_date < self.data.index[-1] and end_date <= self.data.index[-1]:
-                preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date),
-                                                         end=self.data.index.get_loc(end_date))
-
-            # start date is in-sample but end date is not
-            elif start_date < self.data.index[-1] < end_date:
-                num_extra_months = (end_date.year - last_data_date.year) * 12 + (end_date.month - last_data_date.month)
-                # get all in sample predictions and stitch them together with out of sample predictions
-                in_sample_preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date))
-                out_of_sample_preds = self.fit_model.predict(num_extra_months)
-                preds = np.concatenate([in_sample_preds, out_of_sample_preds])
-
-            # only possible scenario at this point is start date is 1 month past last data date
-            else:
-                months_to_predict = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
-                preds = self.fit_model.predict(months_to_predict)
-
-            return pd.Series(preds, index=pd.date_range(start_date, end_date, freq='MS'))
+            return self._predict_auto_arima(start_date, end_date, last_data_date)
 
         ### exponential smoothing
         elif self.fit_model_type == 'exponential_smoothing':
-            return self.fit_model.predict(start=start_date, end=end_date)
+            return self._predict_exponential_smoothing(start_date, end_date)
 
         ### tbats
         elif self.fit_model_type == 'tbats':
-            in_sample_preds = pd.Series(self.fit_model.y_hat,
-                                        index=pd.date_range(start=self.data.index[0],
-                                                            end=self.data.index[-1], freq='MS'))
+            return self._predict_tbats(start_date, end_date, last_data_date)
 
-            # start date and end date are both in-sample
-            if start_date < in_sample_preds.index[-1] and end_date <= in_sample_preds.index[-1]:
-                preds = in_sample_preds.loc[start_date:end_date]
-
-            # start date is in-sample but end date is not
-            elif start_date < self.data.index[-1] < end_date:
-                num_extra_months = (end_date.year - last_data_date.year) * 12 + (end_date.month - last_data_date.month)
-                # get all in sample predictions and stitch them together with out of sample predictions
-                in_sample_portion = in_sample_preds.loc[start_date:]
-                out_of_sample_portion = self.fit_model.forecast(num_extra_months)
-                preds = np.concatenate([in_sample_portion, out_of_sample_portion])
-
-            # only possible scenario at this point is start date is 1 month past last data date
-            else:
-                months_to_predict = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
-                preds = self.fit_model.predict(months_to_predict)
-
-            return pd.Series(preds, index=pd.date_range(start=start_date, end=end_date, freq='MS'))
 
 
