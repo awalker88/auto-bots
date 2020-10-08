@@ -12,7 +12,7 @@ from time import time
 def main():
     config = {'prediction_splitters': ['geography_code', 'market_name', 'dual_unit_name', 'dual_sub_unit_name']}
     start_time = time()
-    split_dfs = clean_data(config)
+    # split_dfs = clean_data(config)
     # pkl.dump(split_dfs, open('cleaned_split_dfs.pkl', 'wb'))
     split_dfs = pkl.load(open('cleaned_split_dfs.pkl', 'rb'))
     results = []
@@ -29,9 +29,9 @@ def main():
             print(f"{i}/{len(split_dfs)} | {atomic_id} | ends too early len={len(tdf)} last_date={tdf.index[-1]}")
         else:
             print(f"{i}/{len(split_dfs)} len={len(tdf)} lenN0={len(tdf[tdf['expense_plan_amount'] != 0])} avg={tdf['expense_plan_amount'].mean():.1f}")
-            model = AutoTS(seasonal_period=6)
+            model = AutoTS(seasonal_period=6, model_names=('auto_arima', 'exponential_smoothing', 'tbats', 'ensemble'), verbose=True)
             model.fit(tdf, series_column_name='expense_plan_amount')
-            p = model.predict(start_date=pd.to_datetime('2019-1-1'), end_date=pd.to_datetime('2020-1-1'))
+            p = model.predict(start_date=pd.to_datetime('2020-1-1'), end_date=pd.to_datetime('2020-2-1'))
             results.append([atomic_id, model.fit_model_type, model.best_model_error])
 
     results_df = pd.DataFrame(results, columns=['model_id', 'model_type', 'error'])
@@ -85,6 +85,10 @@ def is_covid(df: pd.DataFrame):
 
 
 def remove_anomalies(df: pd.DataFrame, amount_col: str, config: dict) -> pd.DataFrame:
+    # if all rows are 0, can't define what an anomaly is. same if we only have one row
+    if (len(df[df[amount_col] == 0]) == len(df)) or (len(df) == 1):
+        return df
+
     df_anom = df.copy()
     df_anom['average'] = df_anom[amount_col].mean()
     df_anom['std'] = df_anom[amount_col].std()
