@@ -186,11 +186,13 @@ class AutoTS:
             model = BATS(
                 seasonal_periods=[self.seasonal_period] + [2, 4],
                 use_arma_errors=False,
-                use_box_cox=False
+                use_box_cox=False,
+                n_jobs=1
             )
         else:
             model = BATS(
                 seasonal_periods=[self.seasonal_period] + [2, 4],
+                n_jobs=1
             )
 
         fitted_model = model.fit(model_data[self.series_column_name])
@@ -199,24 +201,6 @@ class AutoTS:
         error = self._error_metric(test_predictions, 'tb_test_predictions', 'actuals')
 
         return [error, fitted_model, 'tbats', test_predictions]
-
-    # def _fit_prophet(self):
-    #
-    #     # have to check if the dataframe already contains
-    #     datetime_index_name = self.data.index.name
-    #     if datetime_index_name in self.data.columns:
-    #         proph_df = self.data.reset_index(drop=True)
-    #     else:
-    #         proph_df = self.data.reset_index()
-    #
-    #     # prophet requires the input dataframe to have two columns named 'ds' and 'y'
-    #     proph_df = proph_df[[datetime_index_name, self.series_column_name]].\
-    #         rename({datetime_index_name: 'ds', self.series_column_name: 'y'}, axis='columns')
-    #
-    #     model = Prophet(changepoint_range=1.,  # set to 1 since we're fitting only on training data
-    #                     )
-    #
-    #     return Prophet().fit(proph_df)
 
     def _fit_ensemble(self):
         model_predictions = [candidate[3] for candidate in self.candidate_models]
@@ -323,6 +307,7 @@ class AutoTS:
         all_predictions['en_test_predictions'] = all_predictions.mean(axis='columns')
 
         self.fit_model = None
+        self.fit_model_type = 'ensemble'
 
         return pd.Series(all_predictions['en_test_predictions'].values,
                          index=pd.date_range(start=start_date, end=end_date, freq='MS'))
@@ -345,7 +330,7 @@ class AutoTS:
         if not (isinstance(start_date, dt.datetime) and isinstance(end_date, dt.datetime)):
             raise TypeError('Both `start_date` and `end_date` must be datetime objects')
 
-        # check start date comes before end date
+        # check start date comes at least one month before end date
         if start_date + relativedelta(months=+1) > end_date:
             raise ValueError('`start_date` must be at least one month before `end_date`')
 
