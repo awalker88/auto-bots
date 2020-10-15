@@ -31,7 +31,7 @@ class AutoTS:
     """
     Automatic modeler that finds the best time-series method to model your data
     :param model_names: Models to consider when fitting. Currently supported models are
-    'auto_arima', 'exponential_smoothing', and 'tbats'
+    'auto_arima', 'exponential_smoothing', 'tbats', and 'ensemble'. default is all available models
     :param error_metric: Which error metric to use when ranking models. Currently supported metrics
     are 'mase', 'mse', and 'rmse'. default='mase'
     :param seasonal_period: period of the data's seasonal trend. 3 would mean your data has quarterly
@@ -40,7 +40,7 @@ class AutoTS:
     default=4
     """
     def __init__(self,
-                 model_names=('auto_arima', 'exponential_smoothing', 'tbats', 'ensemble'),
+                 model_names: tuple = ('auto_arima', 'exponential_smoothing', 'tbats', 'ensemble'),
                  # model_args: dict = None,
                  error_metric: str = 'mase',
                  seasonal_period: int = None,
@@ -123,7 +123,7 @@ class AutoTS:
         self.fit_model_type = self.candidate_models[0][2]
         self.is_fitted = True
 
-    def _fit_auto_arima(self, use_full_dataset: bool = False):
+    def _fit_auto_arima(self, use_full_dataset: bool = False) -> list:
         """
         Fits an ARIMA model using pmdarima's auto_arima
         :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
@@ -185,7 +185,7 @@ class AutoTS:
 
         return [test_error, model, 'auto_arima', test_predictions]
 
-    def _fit_exponential_smoothing(self, use_full_dataset: bool = False):
+    def _fit_exponential_smoothing(self, use_full_dataset: bool = False) -> list:
         """
         Fits an exponential smoothing model using statsmodels's ExponentialSmoothing model
         :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
@@ -217,7 +217,7 @@ class AutoTS:
 
         return [error, model, 'exponential_smoothing', test_predictions]
 
-    def _fit_tbats(self, use_full_dataset: bool = False, use_simple_model: bool = True):
+    def _fit_tbats(self, use_full_dataset: bool = False, use_simple_model: bool = True) -> list:
         """
         Fits a BATS model using tbats's BATS model
         :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
@@ -252,7 +252,7 @@ class AutoTS:
 
         return [error, fitted_model, 'tbats', test_predictions]
 
-    def _fit_ensemble(self):
+    def _fit_ensemble(self) -> list:
         """
         Fits a model that is the ensemble of all other models specified during AutoTS's initialization
         :return: Currently returns a list where the first item is the error on the test set, the
@@ -270,7 +270,7 @@ class AutoTS:
 
         return [error, None, 'ensemble', all_predictions[['actuals', 'en_test_predictions']]]
 
-    def _error_metric(self, data: pd.DataFrame, predictions_column: str, actuals_column: str):
+    def _error_metric(self, data: pd.DataFrame, predictions_column: str, actuals_column: str) -> list:
         """
         Computes error using the error metric specified during initialization
         :param data: pandas dataframe containing predictions and actuals
@@ -289,7 +289,7 @@ class AutoTS:
         self.series_column_name = series_column_name
 
     def _predict_auto_arima(self, start_date: dt.datetime, end_date: dt.datetime,
-                            last_data_date: dt.datetime, exogenous=None) -> pd.Series:
+                            last_data_date: dt.datetime, exogenous: pd.DataFrame = None) -> pd.Series:
         """ Uses a fit ARIMA model to predict between the given dates """
         # start date and end date are both in-sample
         if start_date < self.data.index[-1] and end_date <= self.data.index[-1]:
@@ -313,11 +313,11 @@ class AutoTS:
 
         return pd.Series(preds, index=pd.date_range(start_date, end_date, freq='MS'))
 
-    def _predict_exponential_smoothing(self, start_date: dt.datetime, end_date: dt.datetime):
+    def _predict_exponential_smoothing(self, start_date: dt.datetime, end_date: dt.datetime) -> pd.Series:
         """ Uses a fit exponential smoothing model to predict between the given dates """
         return self.fit_model.predict(start=start_date, end=end_date)
 
-    def _predict_tbats(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime):
+    def _predict_tbats(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime) -> pd.Series:
         """ Uses a fit BATS model to predict between the given dates """
         in_sample_preds = pd.Series(self.fit_model.y_hat,
                                     index=pd.date_range(start=self.data.index[0],
@@ -343,7 +343,7 @@ class AutoTS:
         return pd.Series(preds, index=pd.date_range(start=start_date, end=end_date, freq='MS'))
 
     def _predict_ensemble(self, start_date: dt.datetime, end_date: dt.datetime,
-                          last_data_date: dt.datetime, exogenous: pd.DataFrame = None):
+                          last_data_date: dt.datetime, exogenous: pd.DataFrame = None) -> pd.Series:
         """ Uses all other fit models to predict between the given dates and averages them """
         ensemble_model_predictions = []
 
@@ -404,9 +404,9 @@ class AutoTS:
         if not (isinstance(start_date, dt.datetime) and isinstance(end_date, dt.datetime)):
             raise TypeError('Both `start_date` and `end_date` must be datetime objects')
 
-        # check start date comes at least one month before end date
-        if start_date + relativedelta(months=+1) > end_date:
-            raise ValueError('`start_date` must be at least one month before `end_date`')
+        # check start date doesn't come before end_date
+        if start_date > end_date:
+            raise ValueError('`end_date` must come after `start_date`')
 
         # check that start date is before or right after that last date given during training
         last_data_date = self.data.index[-1]
