@@ -25,12 +25,13 @@ import validation as val
 # todo: have seasonal_period support multiple periods when training tbats
 # todo: consider normalizing data to be > 1 to allow box cox normalization (particularly in tbats)
 # todo: dynamically set n_jobs on tbats using size of series
+# todo: add error_action flag that users can set to "ignore" if a model goes haywire
 
 class AutoTS:
     """
     Automatic modeler that finds the best time-series method to model your data
     :param model_names: Models to consider when fitting. Currently supported models are
-    'auto_arima', 'exponential_smoothing', and 'tbats'. default=('auto_arima', 'exponential_smoothing')
+    'auto_arima', 'exponential_smoothing', and 'tbats'
     :param error_metric: Which error metric to use when ranking models. Currently supported metrics
     are 'mase', 'mse', and 'rmse'. default='mase'
     :param seasonal_period: period of the data's seasonal trend. 3 would mean your data has quarterly
@@ -76,15 +77,18 @@ class AutoTS:
     def fit(self, data: pd.DataFrame, series_column_name: str, exogenous: list = None) -> None:
         """
         Fit model to given training data
-
-        Note: exogenous variables are not yet supported
-        :param data:
-        :param series_column_name:
-        :param exogenous:
-        :return:
+        :param data: pandas dataframe containing series you would like to predict and any exogenous
+        variables you'd like to be used. The dataframe's index MUST be a datetime index
+        :param series_column_name: name of the column containing the series you would like to predict
+        :param exogenous: column name or list of column names you would like to be used as exogenous
+        regressors. Note: These should not be a constant or a trend
         """
         val.check_datetime_index(data)
         self._set_input_data(data, series_column_name)
+
+        # if user passes a string indicating a single column is to be used as exogenous, turn it into a list
+        if isinstance(exogenous, str):
+            exogenous = []
 
         if exogenous is not None:
             self.using_exogenous = True
@@ -119,17 +123,15 @@ class AutoTS:
         self.fit_model_type = self.candidate_models[0][2]
         self.is_fitted = True
 
-        # now that we know the best model, retrain it on all data
-        # if self.fit_model_type == 'auto_arima':
-        #     self.fit_model = self._fit_auto_arima()[1]
-        # elif self.fit_model_type == 'exponential_smoothing':
-        #     self.fit_model = self._fit_exponential_smoothing(use_full_dataset=True)[1]
-        # elif self.fit_model_type == 'tbats':
-        #     self.fit_model = self._fit_tbats(use_full_dataset=True)[1]
-        # elif self.fit_model_type == 'ensemble':
-        #     self.fit_model = self._fit_ensemble()
-
     def _fit_auto_arima(self, use_full_dataset: bool = False):
+        """
+        Fits an ARIMA model using pmdarima's auto_arima
+        :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
+        subset training data
+        :return: Currently returns a list where the first item is the error on the test set, the
+        second is the arima model, the third is the name of the model, and the fourth is the
+        predictions made on the test set
+        """
         model_data = self.training_data
         if use_full_dataset:
             model_data = self.data
@@ -184,6 +186,14 @@ class AutoTS:
         return [test_error, model, 'auto_arima', test_predictions]
 
     def _fit_exponential_smoothing(self, use_full_dataset: bool = False):
+        """
+        Fits an exponential smoothing model using statsmodels's ExponentialSmoothing model
+        :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
+        subset training data
+        :return: Currently returns a list where the first item is the error on the test set, the
+        second is the exponential smoothing model, the third is the name of the model, and the
+        fourth is the predictions made on the test set
+        """
         if use_full_dataset:
             model_data = self.data
         else:
@@ -208,6 +218,14 @@ class AutoTS:
         return [error, model, 'exponential_smoothing', test_predictions]
 
     def _fit_tbats(self, use_full_dataset: bool = False, use_simple_model: bool = True):
+        """
+        Fits a BATS model using tbats's BATS model
+        :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
+        subset training data
+        :return: Currently returns a list where the first item is the error on the test set, the
+        second is the BATS model, the third is the name of the model, and the
+        fourth is the predictions made on the test set
+        """
         if use_full_dataset:
             model_data = self.data
         else:
@@ -235,6 +253,12 @@ class AutoTS:
         return [error, fitted_model, 'tbats', test_predictions]
 
     def _fit_ensemble(self):
+        """
+        Fits a model that is the ensemble of all other models specified during AutoTS's initialization
+        :return: Currently returns a list where the first item is the error on the test set, the
+        second is the exponential smoothing model, the third is the name of the model, and the
+        fourth is the predictions made on the test set
+        """
         model_predictions = [candidate[3] for candidate in self.candidate_models]
         all_predictions = reduce(lambda left, right: pd.merge(left, right.drop('actuals', axis='columns'),
                                                               left_index=True, right_index=True),
@@ -247,16 +271,26 @@ class AutoTS:
         return [error, None, 'ensemble', all_predictions[['actuals', 'en_test_predictions']]]
 
     def _error_metric(self, data: pd.DataFrame, predictions_column: str, actuals_column: str):
+        """
+        Computes error using the error metric specified during initialization
+        :param data: pandas dataframe containing predictions and actuals
+        :param predictions_column: name of the predictions column
+        :param actuals_column: name of the actuals column
+        :return: error for given data
+        """
         if self.error_metric == 'mase':
             return mase(data, predictions_column, actuals_column)
 
     def _set_input_data(self, data: pd.DataFrame, series_column_name: str):
+        """ Sets datasets at class level """
         self.data = data
         self.training_data = data.iloc[:-self.holdout_period, :]
         self.testing_data = data.iloc[-self.holdout_period:, :]
         self.series_column_name = series_column_name
 
-    def _predict_auto_arima(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime, exogenous=None) -> pd.Series:
+    def _predict_auto_arima(self, start_date: dt.datetime, end_date: dt.datetime,
+                            last_data_date: dt.datetime, exogenous=None) -> pd.Series:
+        """ Uses a fit ARIMA model to predict between the given dates """
         # start date and end date are both in-sample
         if start_date < self.data.index[-1] and end_date <= self.data.index[-1]:
             preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date),
@@ -280,9 +314,11 @@ class AutoTS:
         return pd.Series(preds, index=pd.date_range(start_date, end_date, freq='MS'))
 
     def _predict_exponential_smoothing(self, start_date: dt.datetime, end_date: dt.datetime):
+        """ Uses a fit exponential smoothing model to predict between the given dates """
         return self.fit_model.predict(start=start_date, end=end_date)
 
     def _predict_tbats(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime):
+        """ Uses a fit BATS model to predict between the given dates """
         in_sample_preds = pd.Series(self.fit_model.y_hat,
                                     index=pd.date_range(start=self.data.index[0],
                                                         end=self.data.index[-1], freq='MS'))
@@ -306,7 +342,9 @@ class AutoTS:
 
         return pd.Series(preds, index=pd.date_range(start=start_date, end=end_date, freq='MS'))
 
-    def _predict_ensemble(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime, exogenous: pd.DataFrame = None):
+    def _predict_ensemble(self, start_date: dt.datetime, end_date: dt.datetime,
+                          last_data_date: dt.datetime, exogenous: pd.DataFrame = None):
+        """ Uses all other fit models to predict between the given dates and averages them """
         ensemble_model_predictions = []
 
         if 'auto_arima' in self.model_names:
@@ -352,11 +390,10 @@ class AutoTS:
         :param start_date: date to begin forecast (inclusive), must be either within the date range
         given during fit or the month immediately following the last date given during fit
         :param end_date: date to end forecast (inclusive)
+        :param exogenous: A dataframe of the exogenous regressor column(s) provided during fit().
+        The dataframe should be of equal length to the number of predictions you would like to receive
         :return: A pandas Series of length equal to the number of months between start_date and
         end_date. The series' will have a datetime index
-        :param exogenous: An optional pandas dataframe array of exogenous variables. Must be
-        provided here if exogenous features were provided during model fit. Note: This should not
-        include a constant or trend
         """
         ### checks on data
         if not self.is_fitted:
