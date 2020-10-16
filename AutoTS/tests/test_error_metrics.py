@@ -1,6 +1,6 @@
 import pandas as pd
 
-from error_metrics import mase, mse
+from AutoTS.utils.error_metrics import mase, mse
 
 
 def test_mase(tolerance: float = 0.01):
