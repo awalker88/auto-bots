@@ -9,24 +9,11 @@ import numpy as np
 from pmdarima import auto_arima
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from AutoTS.utils.error_metrics import mase, mse, rmse
-# from fbprophet import Prophet
 # import matplotlib.pyplot as plot
 from tbats import BATS
 
 from AutoTS.utils import validation as val
 
-
-# todo: have user be able to access all models in addition to the one that works best
-# todo: more basic models as options (ma, last period)
-# todo: make example notebook
-# todo: add dlm model
-# todo: remove assumption that data is monthly
-# todo: consider whether to have dynamic=True when predicting in sample for auto_arima
-# todo: split up predict function to be like fit function
-# todo: have seasonal_period support multiple periods when training tbats
-# todo: consider normalizing data to be > 1 to allow box cox normalization (particularly in tbats)
-# todo: dynamically set n_jobs on tbats using size of series
-# todo: add error_action flag that users can set to "ignore" if a model goes haywire
 
 class AutoTS:
     """
@@ -50,7 +37,11 @@ class AutoTS:
                  verbose: bool = False
                  ):
 
+        # input validation
         val.check_models(model_names)
+        valid_error_metrics = ['mase', 'mse', 'rmse']
+        if error_metric not in valid_error_metrics:
+            raise ValueError(f'Error metric must be one of {valid_error_metrics}')
 
         self.model_names = [model.lower() for model in model_names]
         # self.model_args = model_args
@@ -409,9 +400,15 @@ class AutoTS:
             raise AttributeError('Model must be fitted to be able to make predictions. Use the '
                                  '`fit` method to fit before predicting')
 
-        # check inputs are datetimes
-        if not (isinstance(start_date, dt.datetime) and isinstance(end_date, dt.datetime)):
-            raise TypeError('Both `start_date` and `end_date` must be datetime objects')
+        # check inputs are datetimes or strings that are capable of being turned into datetimes
+        if isinstance(start_date, str):
+            start_date = pd.to_datetime(start_date)
+        elif not isinstance(start_date, dt.datetime):
+            raise TypeError('`start_date` must be a str or datetime-like object')
+        if isinstance(end_date, str):
+            end_date = pd.to_datetime(end_date)
+        elif not isinstance(end_date, dt.datetime):
+            raise TypeError('`end_date` must be a str or datetime-like object')
 
         # check start date doesn't come before end_date
         if start_date > end_date:
