@@ -15,7 +15,7 @@ Put the AutoTS folder in your repository. Then, to use the AutoTS model in your 
 ```python
 from AutoTS.AutoTS import AutoTS
 ```
-<sub><sup><sub><sup>It's a lot of AutoTS's, I know</sup></sub></sup></sub>
+<sub><sup>It's a lot of AutoTS's, I know</sup></sub>
 
 You may need to add some more to the import statement if you put the AutoTS folder inside another folder.
 For example, if you put it in a folder named "src" inside your repo, it might need to look more like this:
@@ -25,4 +25,22 @@ from src.AutoTS.AutoTS import AutoTS
 
 # Quickstart
 
-For a good intro to how to use the model, check out [this example]()
+AutoTS follows sci-kit learn's `model.fit()`/`model.predit()` paradigm. The only requirement of your
+data is that it must be a pandas dataframe with a datetime index. Given such a dataframe, here is how
+to train your model and make predictions:
+
+```python
+model = AutoTS()
+
+model.fit(data, series_column_name='passengers')
+model.predict(start_date=pd.to_datetime('1960-1-1'), end_date=pd.to_datetime('1960-12-1'))
+```
+
+### Tips/Tricks/Things to know
+- Since you have to provide the name of the column with the time series data, the dataframe provided 
+during fit can contain as many extra columns as you like and the model will ignore them. No need to do
+a bunch of filtering before training!
+- You can have the model predict in-sample by setting the `start_date` equal to a date inside the data given during fit.
+
+
+For a more thorough introduction, check out [this example](examples/airline_passengers/airline_example.ipynb)
