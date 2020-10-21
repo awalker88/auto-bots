@@ -15,6 +15,7 @@ if __name__ == '__main__':
     airline_data = airline_data.set_index('Month')
     airline_data.head()
 
-    model = AutoTS()
+    model = AutoTS(seasonal_period=12)
     model.fit(airline_data, 'Passengers')
-    model.predict()
+    preds = model.predict(start_date='1961-1-1', end_date='1961-2-1')
+    print(preds)

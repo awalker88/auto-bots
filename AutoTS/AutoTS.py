@@ -29,7 +29,6 @@ class AutoTS:
     """
     def __init__(self,
                  model_names: Union[Tuple, List] = ('auto_arima', 'exponential_smoothing', 'tbats', 'ensemble'),
-                 # model_args: dict = None,
                  error_metric: str = 'mase',
                  seasonal_period: int = None,
                  # seasonality_mode: str = 'm',
@@ -40,11 +39,10 @@ class AutoTS:
         # input validation
         val.check_models(model_names)
         valid_error_metrics = ['mase', 'mse', 'rmse']
-        if error_metric not in valid_error_metrics:
+        if error_metric.lower() not in valid_error_metrics:
             raise ValueError(f'Error metric must be one of {valid_error_metrics}')
 
         self.model_names = [model.lower() for model in model_names]
-        # self.model_args = model_args
         self.error_metric = error_metric.lower()
         self.is_seasonal = True if seasonal_period is not None else False
         self.seasonal_period = seasonal_period
@@ -384,7 +382,8 @@ class AutoTS:
         return pd.Series(all_predictions['en_test_predictions'].values,
                          index=pd.date_range(start=start_date, end=end_date, freq='MS'))
 
-    def predict(self, start_date: dt.datetime, end_date: dt.datetime, exogenous: pd.DataFrame = None) -> pd.Series:
+    def predict(self, start_date: Union[dt.datetime, str], end_date: Union[dt.datetime, str],
+                exogenous: pd.DataFrame = None) -> pd.Series:
         """
         Generates predictions (forecasts) for dates between start_date and end_date (inclusive).
         :param start_date: date to begin forecast (inclusive), must be either within the date range
@@ -418,7 +417,7 @@ class AutoTS:
         last_data_date = self.data.index[-1]
         if start_date > (last_data_date + relativedelta(months=+1)):
             raise ValueError(f'`start_date` must be no more than 1 month past the last date of data received'
-                             f' during fit". Received `start date` is '
+                             f' during fit". Received `start_date` is '
                              f'{(start_date.year - last_data_date.year) * 12 + (start_date.month - last_data_date.month)}'
                              f'months after last date in data {last_data_date}')
 
