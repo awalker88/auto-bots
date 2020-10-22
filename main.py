@@ -15,7 +15,11 @@ if __name__ == '__main__':
     airline_data = airline_data.set_index('Month')
     airline_data.head()
 
-    model = AutoTS(seasonal_period=12)
+    auto_arima_args = {'information_criterion': 'aic'}
+    exponential_smoothing_args = {'trend': 'add'}
+    tbats_args = {'n_jobs': 2}
+
+    model = AutoTS(seasonal_period=12, model_names=['tbats'])
     model.fit(airline_data, 'Passengers')
     preds = model.predict(start_date='1961-1-1', end_date='1961-2-1')
     print(preds)
