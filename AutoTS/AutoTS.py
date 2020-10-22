@@ -166,7 +166,7 @@ class AutoTS:
         except ValueError:
             if 'seasonal_test' in self.auto_arima_args.keys() and self.auto_arima_args['seasonal_test'] == 'ocsb':
                 warnings.warn('Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors')
-                self.auto_arima_args['seasonal_test'] = 'ch'
+            self.auto_arima_args['seasonal_test'] = 'ch'
             model = auto_arima(model_data[self.series_column_name],
                                error_action='ignore',
                                supress_warning=True,
@@ -248,6 +248,8 @@ class AutoTS:
         # if user doesn't specify with kwargs, set these defaults
         if 'n_jobs' not in self.tbats_args.keys():
             self.tbats_args['n_jobs'] = 1
+        if 'use_arma_errors' not in self.tbats_args.keys():
+            self.tbats_args['use_arma_errors'] = False  # helps speed up modeling a bit
 
         model = BATS(seasonal_periods=tbats_seasonal_periods, **self.tbats_args)
 
