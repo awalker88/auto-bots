@@ -33,8 +33,19 @@ class AutoTS:
                  seasonal_period: int = None,
                  # seasonality_mode: str = 'm',
                  holdout_period: int = 4,
-                 verbose: bool = False
+                 verbose: bool = False,
+                 auto_arima_args: dict = None,
+                 exponential_smoothing_args: dict = None,
+                 tbats_args: dict = None
                  ):
+
+        # fix mutable args
+        if auto_arima_args is None:
+            auto_arima_args = {}
+        if exponential_smoothing_args is None:
+            exponential_smoothing_args = {}
+        if tbats_args is None:
+            tbats_args = {}
 
         # input validation
         val.check_models(model_names)
@@ -48,6 +59,9 @@ class AutoTS:
         self.seasonal_period = seasonal_period
         self.holdout_period = holdout_period
         self.verbose = verbose
+        self.auto_arima_args = auto_arima_args
+        self.exponential_smoothing_args = exponential_smoothing_args
+        self.tbats_args = tbats_args
 
         # Set during fitting or by other methods
         self.data = None
@@ -141,21 +155,24 @@ class AutoTS:
             model = auto_arima(model_data[self.series_column_name],
                                error_action='ignore',
                                supress_warning=True,
-                               # trace=True,
                                seasonal=self.is_seasonal, m=auto_arima_seasonal_period,
-                               exogenous=train_exog
+                               exogenous=train_exog,
+                               **self.auto_arima_args
                                )
 
         # occasionally while determining the necessary level of seasonal differencing, we get a weird
         # numpy dot product error due to array sizes mismatching. If that happens, we try using
         # Canova-Hansen test for seasonal differencing instead
         except ValueError:
+            if 'seasonal_test' in self.auto_arima_args.keys() and self.auto_arima_args['seasonal_test'] == 'ocsb':
+                warnings.warn('Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors')
+            self.auto_arima_args['seasonal_test'] = 'ch'
             model = auto_arima(model_data[self.series_column_name],
                                error_action='ignore',
                                supress_warning=True,
-                               # trace=True,
-                               seasonal=self.is_seasonal, m=auto_arima_seasonal_period, seasonal_test='ch',
-                               exogenous=train_exog
+                               seasonal=self.is_seasonal, m=auto_arima_seasonal_period,
+                               exogenous=train_exog,
+                               **self.auto_arima_args
                                )
 
         if use_full_dataset:
@@ -189,12 +206,15 @@ class AutoTS:
         """
         model_data = self.data if use_full_dataset else self.training_data
 
+        # if user doesn't specify with kwargs, set these defaults
+        if 'trend' not in self.exponential_smoothing_args.keys():
+            self.exponential_smoothing_args['trend'] = 'add'
+        if 'seasonal' not in self.exponential_smoothing_args.keys():
+            self.exponential_smoothing_args['seasonal'] = 'add' if self.seasonal_period is not None else None
+
         model = ExponentialSmoothing(model_data[self.series_column_name],
                                      seasonal_periods=self.seasonal_period,
-                                     trend='add',
-                                     seasonal='add' if self.seasonal_period is not None else None,
-                                     # use_boxcox=False,
-                                     # initialization_method='estimated'
+                                     **self.exponential_smoothing_args
                                      ).fit()
 
         test_predictions = pd.DataFrame(
@@ -225,19 +245,13 @@ class AutoTS:
         if self.seasonal_period is not None:
             tbats_seasonal_periods = [self.seasonal_period]
 
-        # turning off arma and box_cox cuts training time by about a third
-        if use_simple_model:
-            model = BATS(
-                seasonal_periods=tbats_seasonal_periods,
-                use_arma_errors=False,
-                use_box_cox=False,
-                n_jobs=1
-            )
-        else:
-            model = BATS(
-                seasonal_periods=tbats_seasonal_periods,
-                n_jobs=1
-            )
+        # if user doesn't specify with kwargs, set these defaults
+        if 'n_jobs' not in self.tbats_args.keys():
+            self.tbats_args['n_jobs'] = 1
+        if 'use_arma_errors' not in self.tbats_args.keys():
+            self.tbats_args['use_arma_errors'] = False  # helps speed up modeling a bit
+
+        model = BATS(seasonal_periods=tbats_seasonal_periods, **self.tbats_args)
 
         fitted_model = model.fit(model_data[self.series_column_name])
         test_predictions = pd.DataFrame({'actuals': self.testing_data[self.series_column_name],

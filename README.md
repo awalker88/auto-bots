@@ -37,7 +37,7 @@ model.predict(start_date=pd.to_datetime('1960-1-1'), end_date=pd.to_datetime('19
 ```
 
 ### Tips/Tricks/Things to know
-- Since you have to provide the name of the column with the time series data, the dataframe provided 
+- Since you provide the name of the time series column during fit, the dataframe provided 
 during fit can contain as many extra columns as you like and the model will ignore them. No need to do
 a bunch of filtering before training!
 - You can have the model predict in-sample by setting the `start_date` equal to a date inside the data given during fit.
