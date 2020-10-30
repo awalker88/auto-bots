@@ -1,6 +1,6 @@
 # auto-ts
 
-AutoTS is an easy-to-use time series forecasting model that does all the model selection work for you
+AutoTS is an easy-to-use time series forecasting model that does all the model selection work for you.
 
 # Installation
 
@@ -25,7 +25,7 @@ from src.AutoTS.AutoTS import AutoTS
 
 # Quickstart
 
-AutoTS follows sci-kit learn's `model.fit()`/`model.predit()` paradigm. The only requirement of your
+AutoTS follows sci-kit learn's `model.fit()`/`model.predict()` paradigm. The only requirement of your
 data is that it must be a pandas dataframe with a datetime index. Given such a dataframe, here is how
 to train your model and make predictions:
 
