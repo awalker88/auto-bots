@@ -1,4 +1,3 @@
-import warnings
 import pandas as pd
 
 
@@ -18,11 +17,7 @@ def check_models(models):
         raise ValueError('If you wish to have `ensemble` be a candidate model, you must specify at '
                          'least two additional valid models')
 
-    # if 'tbats' in models:
-    #     warnings.warn('`tbats` is a slow model, be prepared for longer runtimes will using it')
-
 
 def check_datetime_index(series_df: pd.DataFrame):
     if not isinstance(series_df.index, pd.DatetimeIndex):
         raise TypeError('The index of your dataframe must be a series of datetimes')
-
