@@ -13,6 +13,7 @@ from AutoTS.utils.error_metrics import mase, mse, rmse
 from tbats import BATS
 
 from AutoTS.utils import validation as val
+from AutoTS.utils.CandidateModel import CandidateModel
 
 
 class AutoTS:
@@ -29,9 +30,10 @@ class AutoTS:
     default=4
     """
     def __init__(self,
-                 model_names: Union[Tuple, List] = ('auto_arima', 'exponential_smoothing', 'tbats', 'ensemble'),
+                 model_names: Union[Tuple[str], List[str]] = ('auto_arima', 'exponential_smoothing',
+                                                              'tbats', 'ensemble'),
                  error_metric: str = 'mase',
-                 seasonal_period: Union[int, List] = None,
+                 seasonal_period: Union[int, List[int]] = None,
                  # seasonality_mode: str = 'm',
                  holdout_period: int = 4,
                  verbose: bool = False,
@@ -86,7 +88,7 @@ class AutoTS:
         variables you'd like to be used. The dataframe's index MUST be a datetime index
         :param series_column_name: name of the column containing the series you would like to predict
         :param exogenous: column name or list of column names you would like to be used as exogenous
-        regressors. auto_arima is the only model that supports exogenous regressors. The regressor
+        regressors. auto_arima is the only model that supports exogenous regressors. The repressor
         columns should not be a constant or a trend
         """
         val.check_datetime_index(data)
@@ -103,15 +105,15 @@ class AutoTS:
         if 'auto_arima' in self.model_names:
             self.candidate_models.append(self._fit_auto_arima(use_full_dataset=True))
             if self.verbose:
-                print(f'\tTrained auto_arima model with error {self.candidate_models[-1][0]}')
+                print(f'\tTrained auto_arima model with error {self.candidate_models[-1].error}')
         if 'exponential_smoothing' in self.model_names:
             self.candidate_models.append(self._fit_exponential_smoothing(use_full_dataset=True))
             if self.verbose:
-                print(f'\tTrained exponential_smoothing model with error {self.candidate_models[-1][0]}')
+                print(f'\tTrained exponential_smoothing model with error {self.candidate_models[-1].error}')
         if 'tbats' in self.model_names:
             self.candidate_models.append(self._fit_tbats(use_full_dataset=True))
             if self.verbose:
-                print(f'\tTrained tbats model with error {self.candidate_models[-1][0]}')
+                print(f'\tTrained tbats model with error {self.candidate_models[-1].error}')
         if 'ensemble' in self.model_names:
             if self.candidate_models is None:
                 raise ValueError('No candidate models to ensemble')
@@ -123,13 +125,13 @@ class AutoTS:
         # candidate_models[x][1] = model object
         # candidate_models[x][2] = model's name
         # candidate_models[x][3] = model's predictions for the test set
-        self.candidate_models = sorted(self.candidate_models, key=lambda x: x[0])
-        self.best_model_error = self.candidate_models[0][0]
-        self.fit_model = self.candidate_models[0][1]
-        self.fit_model_type = self.candidate_models[0][2]
+        self.candidate_models = sorted(self.candidate_models, key=lambda x: x.error)
+        self.best_model_error = self.candidate_models[0].error
+        self.fit_model = self.candidate_models[0].fit_model
+        self.fit_model_type = self.candidate_models[0].model_type
         self.is_fitted = True
 
-    def _fit_auto_arima(self, use_full_dataset: bool = False) -> list:
+    def _fit_auto_arima(self, use_full_dataset: bool = False) -> CandidateModel:
         """
         Fits an ARIMA model using pmdarima's auto_arima
         :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
@@ -152,11 +154,12 @@ class AutoTS:
         if self.seasonal_period is None:
             auto_arima_seasonal_period = 1  # need to use auto_arima default if there's no seasonality defined
         else:
-            auto_arima_seasonal_period = auto_arima_seasonal_period[0]  # auto_arima supports only 1 seasonality
+            # since auto_arima supports only 1 seasonality, select the first one as "main" seasonality
+            auto_arima_seasonal_period = auto_arima_seasonal_period[0]
 
         try:
             model = auto_arima(model_data[self.series_column_name],
-                               error_action='ignore',
+                               # error_action='ignore',
                                supress_warning=True,
                                seasonal=self.is_seasonal, m=auto_arima_seasonal_period,
                                exogenous=train_exog,
@@ -171,7 +174,7 @@ class AutoTS:
                 warnings.warn('Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors')
             self.auto_arima_args['seasonal_test'] = 'ch'
             model = auto_arima(model_data[self.series_column_name],
-                               error_action='ignore',
+                               # error_action='ignore',
                                supress_warning=True,
                                seasonal=self.is_seasonal, m=auto_arima_seasonal_period,
                                exogenous=train_exog,
@@ -191,9 +194,9 @@ class AutoTS:
         if not use_full_dataset:
             model.update(self.testing_data[self.series_column_name])
 
-        return [test_error, model, 'auto_arima', test_predictions]
+        return CandidateModel(test_error, model, 'auto_arima', test_predictions)
 
-    def _fit_exponential_smoothing(self, use_full_dataset: bool = False) -> list:
+    def _fit_exponential_smoothing(self, use_full_dataset: bool = False) -> CandidateModel:
         """
         Fits an exponential smoothing model using statsmodels's ExponentialSmoothing model
         :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
@@ -227,9 +230,9 @@ class AutoTS:
 
         error = self._error_metric(test_predictions, 'es_test_predictions', 'actuals')
 
-        return [error, model, 'exponential_smoothing', test_predictions]
+        return CandidateModel(error, model, 'exponential_smoothing', test_predictions)
 
-    def _fit_tbats(self, use_full_dataset: bool = False, use_simple_model: bool = True) -> list:
+    def _fit_tbats(self, use_full_dataset: bool = False, use_simple_model: bool = True) -> CandidateModel:
         """
         Fits a BATS model using tbats's BATS model
         :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
@@ -254,23 +257,22 @@ class AutoTS:
             self.tbats_args['use_arma_errors'] = False  # helps speed up modeling a bit
 
         model = BATS(seasonal_periods=tbats_seasonal_periods, use_box_cox=False, **self.tbats_args)
-
-        fitted_model = model.fit(model_data[self.series_column_name])
+        fit_model = model.fit(model_data[self.series_column_name])
 
         test_predictions = pd.DataFrame({'actuals': self.testing_data[self.series_column_name],
-                                         'tb_test_predictions': fitted_model.forecast(len(self.testing_data))})
+                                         'tb_test_predictions': fit_model.forecast(len(self.testing_data))})
         error = self._error_metric(test_predictions, 'tb_test_predictions', 'actuals')
 
-        return [error, fitted_model, 'tbats', test_predictions]
+        return CandidateModel(error, fit_model, 'tbats', test_predictions)
 
-    def _fit_ensemble(self) -> list:
+    def _fit_ensemble(self) -> CandidateModel:
         """
         Fits a model that is the ensemble of all other models specified during AutoTS's initialization
         :return: Currently returns a list where the first item is the error on the test set, the
         second is the exponential smoothing model, the third is the name of the model, and the
         fourth is the predictions made on the test set
         """
-        model_predictions = [candidate[3] for candidate in self.candidate_models]
+        model_predictions = [candidate.predictions for candidate in self.candidate_models]
         all_predictions = reduce(lambda left, right: pd.merge(left, right.drop('actuals', axis='columns'),
                                                               left_index=True, right_index=True),
                                  model_predictions)
@@ -279,7 +281,7 @@ class AutoTS:
 
         error = self._error_metric(all_predictions, 'en_test_predictions', 'actuals')
 
-        return [error, None, 'ensemble', all_predictions[['actuals', 'en_test_predictions']]]
+        return CandidateModel(error, None, 'ensemble', all_predictions[['actuals', 'en_test_predictions']])
 
     def _error_metric(self, data: pd.DataFrame, predictions_column: str, actuals_column: str) -> float:
         """
@@ -364,26 +366,26 @@ class AutoTS:
 
         if 'auto_arima' in self.model_names:
             # todo: the way this works is kind of janky right now. probably want to move away from setting
-            # and resetting the fit_model attribute for each candidate model
-            for model in self.candidate_models:
-                if model[2] == 'auto_arima':
-                    self.fit_model = model[1]
+            #  and resetting the fit_model attribute for each candidate model
+            for candidate in self.candidate_models:
+                if candidate.model_type == 'auto_arima':
+                    self.fit_model = candidate.fit_model
             preds = self._predict_auto_arima(start_date, end_date, last_data_date, exogenous)
             preds = preds.rename('auto_arima_predictions')
             ensemble_model_predictions.append(preds)
 
         if 'exponential_smoothing' in self.model_names:
-            for model in self.candidate_models:
-                if model[2] == 'exponential_smoothing':
-                    self.fit_model = model[1]
+            for candidate in self.candidate_models:
+                if candidate.model_type == 'exponential_smoothing':
+                    self.fit_model = candidate.fit_model
             preds = self._predict_exponential_smoothing(start_date, end_date)
             preds = preds.rename('exponential_smoothing_predictions')
             ensemble_model_predictions.append(preds)
 
         if 'tbats' in self.model_names:
-            for model in self.candidate_models:
-                if model[2] == 'tbats':
-                    self.fit_model = model[1]
+            for candidate in self.candidate_models:
+                if candidate.model_type == 'tbats':
+                    self.fit_model = candidate.fit_model
             preds = self._predict_tbats(start_date, end_date, last_data_date)
             preds = preds.rename('tbats_predictions')
             ensemble_model_predictions.append(preds)
