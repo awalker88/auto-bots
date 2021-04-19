@@ -6,7 +6,7 @@ with open('README.md', 'r') as f:
 requirements = ['pandas>=1.2.0', 'pmdarima>=1.8.0', 'tbats>-1.1.0', 'statsmodels>=0.12.2']
 
 setup(
-    name="auto-ts",
+    name="AutoTS",
     version="0.1",
     author="Andrew Walker",
     author_email="awalker88@me.com",
