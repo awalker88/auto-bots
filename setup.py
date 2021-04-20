@@ -7,14 +7,14 @@ requirements = ['pandas>=1.2.0', 'pmdarima>=1.8.0', 'tbats>=1.1.0', 'statsmodels
 
 setup(
     name="auto-time-series",
-    version="0.1",
+    version="0.1.1",
     author="Andrew Walker",
     author_email="awalker88@me.com",
     description="Automated time-series forecasting",
     long_description=readme,
     long_description_content_type="text/markdown",
     url="https://github.com/awalker88/auto-time-series",
-    packages=find_packages(),
+    packages=['.'],
     install_requires=requirements,
     classifiers=[
         "Programming Language :: Python :: 3 :: Only",
