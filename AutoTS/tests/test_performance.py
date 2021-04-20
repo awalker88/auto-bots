@@ -4,6 +4,8 @@ from time import time
 
 from AutoTS.AutoTS import AutoTS
 
+print('starting test_performance')
+
 airline_data = pd.read_csv('/Users/andrewwalker/PycharmProjects/auto-ts/examples/airline_passengers/AirPassengers.csv')
 airline_data['Month'] = pd.to_datetime(airline_data['Month'])
 airline_data = airline_data.set_index('Month')

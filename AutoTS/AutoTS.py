@@ -8,10 +8,10 @@ import pandas as pd
 import numpy as np
 from pmdarima import auto_arima
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
-from AutoTS.utils.error_metrics import mase, mse, rmse
 # import matplotlib.pyplot as plot
 from tbats import BATS
 
+from AutoTS.utils.error_metrics import mase, mse, rmse
 from AutoTS.utils import validation as val
 from AutoTS.utils.CandidateModel import CandidateModel
 
@@ -105,26 +105,22 @@ class AutoTS:
         if 'auto_arima' in self.model_names:
             self.candidate_models.append(self._fit_auto_arima(use_full_dataset=True))
             if self.verbose:
-                print(f'\tTrained auto_arima model with error {self.candidate_models[-1].error}')
+                print(f'\tTrained auto_arima model with error {self.candidate_models[-1].error:.4f}')
         if 'exponential_smoothing' in self.model_names:
             self.candidate_models.append(self._fit_exponential_smoothing(use_full_dataset=True))
             if self.verbose:
-                print(f'\tTrained exponential_smoothing model with error {self.candidate_models[-1].error}')
+                print(f'\tTrained exponential_smoothing model with error {self.candidate_models[-1].error:.4f}')
         if 'tbats' in self.model_names:
             self.candidate_models.append(self._fit_tbats(use_full_dataset=True))
             if self.verbose:
-                print(f'\tTrained tbats model with error {self.candidate_models[-1].error}')
+                print(f'\tTrained tbats model with error {self.candidate_models[-1].error:.4f}')
         if 'ensemble' in self.model_names:
             if self.candidate_models is None:
                 raise ValueError('No candidate models to ensemble')
             self.candidate_models.append(self._fit_ensemble())
             if self.verbose:
-                print(f'\tTrained ensemble model with error {self.candidate_models[-1][0]}')
+                print(f'\tTrained ensemble model with error {self.candidate_models[-1].error:.4f}')
 
-        # candidate_models[x][0] = model's error
-        # candidate_models[x][1] = model object
-        # candidate_models[x][2] = model's name
-        # candidate_models[x][3] = model's predictions for the test set
         self.candidate_models = sorted(self.candidate_models, key=lambda x: x.error)
         self.best_model_error = self.candidate_models[0].error
         self.fit_model = self.candidate_models[0].fit_model
@@ -159,7 +155,7 @@ class AutoTS:
 
         try:
             model = auto_arima(model_data[self.series_column_name],
-                               # error_action='ignore',
+                               error_action='ignore',
                                supress_warning=True,
                                seasonal=self.is_seasonal, m=auto_arima_seasonal_period,
                                exogenous=train_exog,
@@ -174,7 +170,7 @@ class AutoTS:
                 warnings.warn('Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors')
             self.auto_arima_args['seasonal_test'] = 'ch'
             model = auto_arima(model_data[self.series_column_name],
-                               # error_action='ignore',
+                               error_action='ignore',
                                supress_warning=True,
                                seasonal=self.is_seasonal, m=auto_arima_seasonal_period,
                                exogenous=train_exog,
@@ -232,7 +228,7 @@ class AutoTS:
 
         return CandidateModel(error, model, 'exponential_smoothing', test_predictions)
 
-    def _fit_tbats(self, use_full_dataset: bool = False, use_simple_model: bool = True) -> CandidateModel:
+    def _fit_tbats(self, use_full_dataset: bool = False) -> CandidateModel:
         """
         Fits a BATS model using tbats's BATS model
         :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
