@@ -6,14 +6,14 @@ with open('README.md', 'r') as f:
 requirements = ['pandas>=1.2.0', 'pmdarima>=1.8.0', 'tbats>=1.1.0', 'statsmodels>=0.12.2']
 
 setup(
-    name="auto-time-series",
+    name="auto-bots",
     version="0.1.3",
     author="Andrew Walker",
     author_email="awalker88@me.com",
     description="Automated time-series forecasting",
     long_description=readme,
     long_description_content_type="text/markdown",
-    url="https://github.com/awalker88/auto-time-series",
+    url="https://github.com/awalker88/auto-bots",
     packages=find_packages(),
     include_package_data=True,
     install_requires=requirements,
