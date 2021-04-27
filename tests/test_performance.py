@@ -14,19 +14,18 @@ def seasonality_tests(data: pd.DataFrame):
         print(f"Test passed with seasonality = {seasonality}")
 
 
-def test_individual_models(data):
-    pass
-
-
 def test_accuracy(
     train_data: pd.DataFrame,
     test_data: pd.DataFrame,
     dataset_name: str,
     seasonality: Union[int, List[int]],
-    models: Union[List[str], Tuple[str]],
+    models: Union[List[str], Tuple[str]] = None,
 ):
-
-    model = AutoTS(seasonal_period=seasonality, verbose=True)
+    print(f"Starting accuracy test for dataset {dataset_name}")
+    if models is not None:
+        model = AutoTS(seasonal_period=seasonality, verbose=2, model_names=models)
+    else:
+        model = AutoTS(seasonal_period=seasonality, verbose=2)
     model.fit(data=train_data, series_column_name="ts")
 
     forecast = pd.Series(
@@ -51,6 +50,9 @@ def test_accuracy(
             f"Passed airline accuracy test with train error = {model.best_model_error:.3f} and "
             f"test error {forecast_error:.3f}"
         )
+
+    elif dataset_name == "gasoline":
+        pass
 
 
 if __name__ == "__main__":
@@ -79,7 +81,7 @@ if __name__ == "__main__":
     gasoline_train, gasoline_test = gasoline[:-104], gasoline[-104:]
 
     # seasonality_tests(airline)
-    # test_accuracy(airline_train, airline_test, 12, 'airline')
-    # test_accuracy(shampoo_train, shampoo_test, 6, 'shampoo')
-    # test_accuracy(sunspots_train, sunspots_test, 6, 'sunspots')
-    test_accuracy(gasoline_train, gasoline_test, 52, "sunspots")
+    # test_accuracy(airline_train, airline_test, 'airline', 12)
+    # test_accuracy(shampoo_train, shampoo_test, 'shampoo', 6)
+    # test_accuracy(sunspots_train, sunspots_test 'sunspots', 6)
+    test_accuracy(gasoline_train, gasoline_test, "gasoline", 52, models=["tbats"])
