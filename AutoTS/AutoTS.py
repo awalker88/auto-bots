@@ -36,7 +36,7 @@ class AutoTS:
                  seasonal_period: Union[int, List[int]] = None,
                  # seasonality_mode: str = 'm',
                  holdout_period: int = 4,
-                 verbose: bool = False,
+                 verbose: int = 0,
                  auto_arima_args: dict = None,
                  exponential_smoothing_args: dict = None,
                  tbats_args: dict = None
@@ -104,21 +104,21 @@ class AutoTS:
 
         if 'auto_arima' in self.model_names:
             self.candidate_models.append(self._fit_auto_arima(use_full_dataset=True))
-            if self.verbose:
+            if self.verbose >= 1:
                 print(f'\tTrained auto_arima model with error {self.candidate_models[-1].error:.4f}')
         if 'exponential_smoothing' in self.model_names:
             self.candidate_models.append(self._fit_exponential_smoothing(use_full_dataset=True))
-            if self.verbose:
+            if self.verbose >= 1:
                 print(f'\tTrained exponential_smoothing model with error {self.candidate_models[-1].error:.4f}')
         if 'tbats' in self.model_names:
             self.candidate_models.append(self._fit_tbats(use_full_dataset=True))
-            if self.verbose:
+            if self.verbose >= 1:
                 print(f'\tTrained tbats model with error {self.candidate_models[-1].error:.4f}')
         if 'ensemble' in self.model_names:
             if self.candidate_models is None:
                 raise ValueError('No candidate models to ensemble')
             self.candidate_models.append(self._fit_ensemble())
-            if self.verbose:
+            if self.verbose >= 1:
                 print(f'\tTrained ensemble model with error {self.candidate_models[-1].error:.4f}')
 
         self.candidate_models = sorted(self.candidate_models, key=lambda x: x.error)
@@ -154,6 +154,8 @@ class AutoTS:
             auto_arima_seasonal_period = auto_arima_seasonal_period[0]
 
         try:
+            if self.verbose >= 2:
+                print('\tStarting training for auto_arima')
             model = auto_arima(model_data[self.series_column_name],
                                error_action='ignore',
                                supress_warning=True,
@@ -166,6 +168,8 @@ class AutoTS:
         # numpy dot product error due to array sizes mismatching. If that happens, we try using
         # Canova-Hansen test for seasonal differencing instead
         except ValueError:
+            if self.verbose >= 2:
+                print('\tSeasonal differencing for auto_arima failed. Trying Canova-Hansen method.')
             if 'seasonal_test' in self.auto_arima_args.keys() and self.auto_arima_args['seasonal_test'] == 'ocsb':
                 warnings.warn('Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors')
             self.auto_arima_args['seasonal_test'] = 'ch'
