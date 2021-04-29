@@ -33,7 +33,7 @@ to train your model and make predictions:
 model = AutoTS()
 
 model.fit(data, series_column_name='passengers')
-model.predict(start_date=pd.to_datetime('1960-1-1'), end_date=pd.to_datetime('1960-12-1'))
+model.predict(start=pd.to_datetime('1960-1-1'), end=pd.to_datetime('1960-12-1'))
 ```
 
 ### Tips/Tricks/Things to know
