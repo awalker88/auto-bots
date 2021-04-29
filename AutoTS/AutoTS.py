@@ -1,5 +1,4 @@
 import warnings
-from dateutil.relativedelta import relativedelta
 import datetime as dt
 from functools import reduce
 from typing import Union, List, Tuple
@@ -92,6 +91,9 @@ class AutoTS:
         :param data: pandas dataframe containing series you would like to predict and any exogenous
         variables you'd like to be used. The dataframe's index MUST be a datetime index
         :param series_column_name: name of the column containing the series you would like to predict
+        :param freq: frequency of your time series. pandas does a pretty good job inferring,
+        but you can also specify via one of the options here
+        https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
         :param exogenous: column name or list of column names you would like to be used as exogenous
         regressors. auto_arima is the only model that supports exogenous regressors. The repressor
         columns should not be a constant or a trend
