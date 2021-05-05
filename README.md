@@ -1,10 +1,13 @@
-# auto-ts
+# auto-bots
 
-AutoTS is an easy-to-use time series forecasting model that does all the model selection work for you.
+`auto-bots` is an easy-to-use time series forecasting package that does all the model selection work for you.
 
 # Installation
+You can install `auto-bots` with a simple
+```commandline
+pip install auto-bots
+```
 
-First, make sure you have installed the following packages (make sure to get the right versions when specified)
 ```
 pandas
 pmdarima==1.71

@@ -7,7 +7,7 @@ requirements = ["pandas>=1.2.0", "pmdarima>=1.8.0", "tbats>=1.1.0", "statsmodels
 
 setup(
     name="auto-bots",
-    version="0.0.1a",
+    version="0.0.2",
     author="Andrew Walker",
     author_email="awalker88@me.com",
     description="Automated time-series forecasting",

@@ -499,13 +499,13 @@ class AutoTS:
         self.prediction_index = pd.date_range(start, end, freq=self.freq)
         if start != self.prediction_index[0]:
             warnings.warn(
-                f"Using {self.prediction_index[0]} instead of given start {start} since given date/time "
-                f"is not valid with frequency {self.freq}",
+                f"Given start {start} since is not valid with frequency {self.freq}. "
+                f"Using {self.prediction_index[0]} instead",
                 UserWarning,
             )
         if end != self.prediction_index[-1]:
             warnings.warn(
-                f"Using {self.prediction_index[-1]} instead of given end {end} since given date/time "
-                f"is not valid with frequency {self.freq}",
+                f"Given end {end} since is not valid with frequency {self.freq}. "
+                f"Using {self.prediction_index[-1]} instead",
                 UserWarning,
             )
