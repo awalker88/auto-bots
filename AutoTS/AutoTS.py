@@ -26,7 +26,7 @@ class AutoTS:
     :param seasonal_period: period of the data's seasonal trend. 3 would mean your data has quarterly
     trends. Supported models can use multiple seasonalities if a list is provided (Non-supported models
     will use the first item in list). None implies no seasonality.
-    :param holdout_period: number of periods to leave out as a test set when comparing candidate models.
+    # :param holdout_period: number of periods to leave out as a test set when comparing candidate models.
     default=4
     """
 
@@ -35,7 +35,6 @@ class AutoTS:
         model_names: Union[Tuple[str], List[str]] = ("auto_arima", "exponential_smoothing", "tbats", "ensemble"),
         error_metric: str = "mase",
         seasonal_period: Union[int, List[int]] = None,
-        holdout_period: int = 4,
         verbose: int = 0,
         auto_arima_args: dict = None,
         exponential_smoothing_args: dict = None,
@@ -60,7 +59,6 @@ class AutoTS:
         self.error_metric = error_metric.lower()
         self.is_seasonal = True if seasonal_period is not None else False
         self.seasonal_period = [seasonal_period] if isinstance(seasonal_period, int) else seasonal_period
-        self.holdout_period = holdout_period
         self.verbose = verbose
         self.auto_arima_args = auto_arima_args
         self.exponential_smoothing_args = exponential_smoothing_args
@@ -68,8 +66,6 @@ class AutoTS:
 
         # Set during fitting or by other methods
         self.data = None
-        self.training_data = None
-        self.testing_data = None
         self.series_column_name = None
         self.freq = None
         self.exogenous = None
@@ -99,7 +95,8 @@ class AutoTS:
         columns should not be a constant or a trend
         """
         val.check_datetime_index(data)
-        self._set_input_data(data, series_column_name)
+        self.data = data
+        self.series_column_name = series_column_name
 
         if freq == "infer":
             self.freq = pd.infer_freq(data.index.to_series())
@@ -153,13 +150,9 @@ class AutoTS:
         second is the arima model, the third is the name of the model, and the fourth is the
         predictions made on the test set
         """
-        model_data = self.data if use_full_dataset else self.training_data
-
-        train_exog = None
-        test_exog = None
+        exog = None
         if self.using_exogenous:
-            train_exog = model_data[self.exogenous]
-            test_exog = self.testing_data[self.exogenous]
+            exog = self.data[self.exogenous]
 
         auto_arima_seasonal_period = self.seasonal_period
         if self.seasonal_period is None:
@@ -170,12 +163,12 @@ class AutoTS:
 
         try:
             model = auto_arima(
-                model_data[self.series_column_name],
+                self.data[self.series_column_name],
                 error_action="ignore",
                 supress_warning=True,
                 seasonal=self.is_seasonal,
                 m=auto_arima_seasonal_period,
-                exogenous=train_exog,
+                exogenous=exog,
                 **self.auto_arima_args,
             )
 
@@ -189,28 +182,23 @@ class AutoTS:
                 warnings.warn('Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors', UserWarning)
             self.auto_arima_args["seasonal_test"] = "ch"
             model = auto_arima(
-                model_data[self.series_column_name],
+                self.data[self.series_column_name],
                 error_action="ignore",
                 supress_warning=True,
                 seasonal=self.is_seasonal,
                 m=auto_arima_seasonal_period,
-                exogenous=train_exog,
+                exogenous=exog,
                 **self.auto_arima_args,
             )
 
         test_predictions = pd.DataFrame(
             {
-                "actuals": self.testing_data[self.series_column_name],
-                "aa_test_predictions": model.predict(n_periods=len(self.testing_data), exogenous=test_exog),
+                "actuals": self.data[self.series_column_name],
+                "aa_test_predictions": model.predict_in_sample(exogenous=exog)
             }
         )
 
         test_error = self._error_metric(test_predictions, "aa_test_predictions", "actuals")
-
-        # if we didn't use all available data when training, we'll update it with the testing data
-        # since we already have the testing error
-        if not use_full_dataset:
-            model.update(self.testing_data[self.series_column_name])
 
         return CandidateModel(test_error, model, "auto_arima", test_predictions)
 
@@ -223,8 +211,6 @@ class AutoTS:
         second is the exponential smoothing model, the third is the name of the model, and the
         fourth is the predictions made on the test set
         """
-        model_data = self.data if use_full_dataset else self.training_data
-
         # if user doesn't specify with kwargs, set these defaults
         if "trend" not in self.exponential_smoothing_args.keys():
             self.exponential_smoothing_args["trend"] = "add"
@@ -236,14 +222,14 @@ class AutoTS:
             es_seasonal_period = es_seasonal_period[0]  # es supports only 1 seasonality
 
         model = ExponentialSmoothing(
-            model_data[self.series_column_name], seasonal_periods=es_seasonal_period, **self.exponential_smoothing_args
+            self.data[self.series_column_name], seasonal_periods=es_seasonal_period, **self.exponential_smoothing_args
         ).fit()
 
         test_predictions = pd.DataFrame(
             {
-                "actuals": self.testing_data[self.series_column_name],
+                "actuals": self.data[self.series_column_name],
                 "es_test_predictions": model.predict(
-                    self.testing_data.index[-self.holdout_period], self.testing_data.index[-1]
+                    self.data.index[0], self.data.index[-1]
                 ),
             }
         )
@@ -261,8 +247,6 @@ class AutoTS:
         second is the BATS model, the third is the name of the model, and the
         fourth is the predictions made on the test set
         """
-        model_data = self.data if use_full_dataset else self.training_data
-
         tbats_seasonal_periods = self.seasonal_period
         if self.seasonal_period is not None:
             tbats_seasonal_periods = self.seasonal_period
@@ -274,12 +258,12 @@ class AutoTS:
             self.tbats_args["use_arma_errors"] = False  # helps speed up modeling a bit
 
         model = BATS(seasonal_periods=tbats_seasonal_periods, use_box_cox=False, **self.tbats_args)
-        fit_model = model.fit(model_data[self.series_column_name])
+        fit_model = model.fit(self.data[self.series_column_name])
 
         test_predictions = pd.DataFrame(
             {
-                "actuals": self.testing_data[self.series_column_name],
-                "tb_test_predictions": fit_model.forecast(len(self.testing_data)),
+                "actuals": self.data[self.series_column_name],
+                "tb_test_predictions": fit_model.y_hat,
             }
         )
         error = self._error_metric(test_predictions, "tb_test_predictions", "actuals")
@@ -321,13 +305,6 @@ class AutoTS:
             return mse(data, predictions_column, actuals_column)
         if self.error_metric == "rmse":
             return rmse(data, predictions_column, actuals_column)
-
-    def _set_input_data(self, data: pd.DataFrame, series_column_name: str):
-        """Sets datasets at class level"""
-        self.data = data
-        self.training_data = data.iloc[: -self.holdout_period, :]
-        self.testing_data = data.iloc[-self.holdout_period :, :]
-        self.series_column_name = series_column_name
 
     def _predict_auto_arima(
         self,
