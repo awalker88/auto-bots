@@ -60,7 +60,7 @@ def test_date_ranges(
         end_date: dt.datetime,
         models: Union[List[str], Tuple[str]] = None
 ):
-    print(f"Starting date range test for dataset {dataset_name} with models {models} start date {start_date} end date {end_date}")
+    print(f"Starting date range test for dataset {dataset_name} with models {models} test start date {start_date} test end date {end_date}")
     if models is not None:
         model = AutoTS(seasonal_period=seasonality, verbose=2, model_names=models)
     else:
@@ -74,7 +74,7 @@ def test_date_ranges(
 
 
 if __name__ == "__main__":
-    start_time = dt.time()
+    start_time = dt.datetime.now()
     airline = pd.read_csv("../examples/airline_passengers/AirPassengers.csv")
     airline["Month"] = pd.to_datetime(airline["Month"])
     airline = airline.set_index("Month")
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     gasoline_train, gasoline_test = gasoline[-156:-52], gasoline[-52:]  # limit 2 years to speed up modeling
 
     model_sets = [
-        # ['auto_arima'],
+        ['auto_arima'],
         ['exponential_smoothing'],
         ['tbats'],
         None
@@ -111,16 +111,16 @@ if __name__ == "__main__":
         [gasoline_test.index[0], gasoline_test.index[-1]]
     ]
 
-    # seasonality_tests(airline)
-    # test_accuracy(airline_train, airline_test, 'airline', 12)
-    # test_accuracy(shampoo_train, shampoo_test, 'shampoo', 6)
+    seasonality_tests(airline)
+    test_accuracy(airline_train, airline_test, 'airline', 12)
+    test_accuracy(shampoo_train, shampoo_test, 'shampoo', 6)
 
-    # for model_set in model_sets:
-    #     for dates in airline_test_dates:
-    #         test_date_ranges(airline_train, "airline", 12, start_date=dates[0], end_date=dates[1], models=model_set)
+    for model_set in model_sets:
+        for dates in airline_test_dates:
+            test_date_ranges(airline_train, "airline", 12, start_date=dates[0], end_date=dates[1], models=model_set)
 
     for model_set in model_sets:
         for dates in gasoline_test_dates:
             test_date_ranges(gasoline_train, "gasoline", 52, start_date=dates[0], end_date=dates[1], models=model_set)
-
-    print(f'Completed testing in {dt.time() - start_time:.1} seconds')
+    end_time = dt.time()
+    print(f'Completed testing in {dt.datetime.now() - start_time:.1} seconds')
