@@ -25,8 +25,6 @@ class AutoTS:
     :param seasonal_period: period of the data's seasonal trend. 3 would mean your data has quarterly
     trends. Supported models can use multiple seasonalities if a list is provided (Non-supported models
     will use the first item in list). None implies no seasonality.
-    # :param holdout_period: number of periods to leave out as a test set when comparing candidate models.
-    default=4
     """
 
     def __init__(
@@ -450,6 +448,9 @@ class AutoTS:
         # ahead and make it a dataframe, just to be nice :)
         if isinstance(exogenous, pd.Series):
             exogenous = pd.DataFrame(exogenous)
+
+        # limit exogenous to dates that are specified by start and end date
+        exogenous = exogenous[exogenous.index.isin(list(self.prediction_index))]
 
         if self.fit_model_type == "auto_arima":
             return self._predict_auto_arima(pred_start, pred_end, last_period, exogenous)
