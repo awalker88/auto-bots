@@ -1,9 +1,9 @@
 from typing import Union, List, Tuple
 from dateutil.relativedelta import relativedelta
 import datetime as dt
+from time import time
 
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from AutoTS.AutoTS import AutoTS
 from AutoTS.utils.error_metrics import mase
@@ -22,7 +22,7 @@ def test_accuracy(
     train_data: pd.DataFrame,
     test_data: pd.DataFrame,
     dataset_name: str,
-    seasonality: Union[int, List[int]] = None,
+    seasonality,
 ):
     print(f"Starting accuracy test for dataset {dataset_name}")
     model = AutoTS(seasonal_period=seasonality, verbose=2)
@@ -45,9 +45,16 @@ def test_accuracy(
         )
     elif dataset_name == "shampoo":
         assert model.best_model_error < 0.6
-        assert forecast_error < 1.
+        assert forecast_error < 1.0
         print(
             f"Passed shampoo accuracy test with train error = {model.best_model_error:.3f} and "
+            f"test error {forecast_error:.3f}"
+        )
+    elif dataset_name == "gasoline":
+        assert model.best_model_error < 0.5
+        assert forecast_error < 1.5
+        print(
+            f"Passed gasoline accuracy test with train error = {model.best_model_error:.3f} and "
             f"test error {forecast_error:.3f}"
         )
 
@@ -60,8 +67,10 @@ def test_date_ranges(
     end_date: dt.datetime,
     models: Union[List[str], Tuple[str]] = None,
 ):
-    print(f"Starting date range test for dataset {dataset_name} with models {models} test "
-          f"start date {start_date} test end date {end_date}")
+    print(
+        f"Starting date range test for dataset {dataset_name} with models {models} test "
+        f"start date {start_date} test end date {end_date}"
+    )
     if models is not None:
         model = AutoTS(seasonal_period=seasonality, verbose=2, model_names=models)
     else:
@@ -72,7 +81,7 @@ def test_date_ranges(
 
 
 if __name__ == "__main__":
-    start_time = dt.datetime.now()
+    start_time = time()
     airline = pd.read_csv("../examples/airline_passengers/AirPassengers.csv")
     airline["Month"] = pd.to_datetime(airline["Month"])
     airline = airline.set_index("Month")
@@ -105,8 +114,9 @@ if __name__ == "__main__":
     ]
 
     seasonality_tests(airline)
-    test_accuracy(airline_train, airline_test, "shampoo", 6)
-    test_accuracy(gasoline_train, gasoline_test, "gasoline", 52)
+    test_accuracy(airline_train, airline_test, "airline", 12)
+    test_accuracy(shampoo_train, shampoo_test, "shampoo", 6)
+    test_accuracy(gasoline_train, gasoline_test, "gasoline", 52.179)
 
     for model_set in model_sets:
         for dates in airline_test_dates:
@@ -115,5 +125,5 @@ if __name__ == "__main__":
     for model_set in model_sets:
         for dates in gasoline_test_dates:
             test_date_ranges(gasoline_train, "gasoline", 52, start_date=dates[0], end_date=dates[1], models=model_set)
-    end_time = dt.time()
-    print(f"Completed testing in {dt.datetime.now() - start_time:.1} seconds")
+
+    print(f"Completed testing in {time() - start_time:.1f} seconds")

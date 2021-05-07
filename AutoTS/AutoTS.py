@@ -8,7 +8,6 @@ import numpy as np
 from pmdarima import auto_arima
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
-# import matplotlib.pyplot as plot
 from tbats import BATS
 
 from AutoTS.utils.error_metrics import mase, mse, rmse
@@ -34,12 +33,13 @@ class AutoTS:
         self,
         model_names: Union[Tuple[str], List[str]] = ("auto_arima", "exponential_smoothing", "tbats", "ensemble"),
         error_metric: str = "mase",
-        seasonal_period: Union[int, List[int]] = None,
+        seasonal_period: Union[int, float, List[int], List[float]] = None,
         verbose: int = 0,
         auto_arima_args: dict = None,
         exponential_smoothing_args: dict = None,
         tbats_args: dict = None,
     ):
+        self.verbose = verbose
 
         # fix mutable args
         if auto_arima_args is None:
@@ -58,8 +58,7 @@ class AutoTS:
         self.model_names = [model.lower() for model in model_names]
         self.error_metric = error_metric.lower()
         self.is_seasonal = True if seasonal_period is not None else False
-        self.seasonal_period = [seasonal_period] if isinstance(seasonal_period, int) else seasonal_period
-        self.verbose = verbose
+        self.seasonal_period = val.set_seasonal_period(self, seasonal_period)
         self.auto_arima_args = auto_arima_args
         self.exponential_smoothing_args = exponential_smoothing_args
         self.tbats_args = tbats_args
@@ -117,15 +116,15 @@ class AutoTS:
             self.exogenous = exogenous
 
         if "auto_arima" in self.model_names:
-            self.candidate_models.append(self._fit_auto_arima(use_full_dataset=True))
+            self.candidate_models.append(self._fit_auto_arima())
             if self.verbose >= 1:
                 print(f"\tTrained auto_arima model with error {self.candidate_models[-1].error:.4f}")
         if "exponential_smoothing" in self.model_names:
-            self.candidate_models.append(self._fit_exponential_smoothing(use_full_dataset=True))
+            self.candidate_models.append(self._fit_exponential_smoothing())
             if self.verbose >= 1:
                 print(f"\tTrained exponential_smoothing model with error {self.candidate_models[-1].error:.4f}")
         if "tbats" in self.model_names:
-            self.candidate_models.append(self._fit_tbats(use_full_dataset=True))
+            self.candidate_models.append(self._fit_tbats())
             if self.verbose >= 1:
                 print(f"\tTrained tbats model with error {self.candidate_models[-1].error:.4f}")
         if "ensemble" in self.model_names:
@@ -141,11 +140,9 @@ class AutoTS:
         self.fit_model_type = self.candidate_models[0].model_type
         self.is_fitted = True
 
-    def _fit_auto_arima(self, use_full_dataset: bool = False) -> CandidateModel:
+    def _fit_auto_arima(self) -> CandidateModel:
         """
         Fits an ARIMA model using pmdarima's auto_arima
-        :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
-        subset training data
         :return: Currently returns a list where the first item is the error on the test set, the
         second is the arima model, the third is the name of the model, and the fourth is the
         predictions made on the test set
@@ -159,7 +156,7 @@ class AutoTS:
             auto_arima_seasonal_period = 1  # need to use auto_arima default if there's no seasonality defined
         else:
             # since auto_arima supports only 1 seasonality, select the first one as "main" seasonality
-            auto_arima_seasonal_period = auto_arima_seasonal_period[0]
+            auto_arima_seasonal_period = int(auto_arima_seasonal_period[0])
 
         try:
             model = auto_arima(
@@ -194,7 +191,7 @@ class AutoTS:
         test_predictions = pd.DataFrame(
             {
                 "actuals": self.data[self.series_column_name],
-                "aa_test_predictions": model.predict_in_sample(exogenous=exog)
+                "aa_test_predictions": model.predict_in_sample(exogenous=exog),
             }
         )
 
@@ -202,11 +199,9 @@ class AutoTS:
 
         return CandidateModel(test_error, model, "auto_arima", test_predictions)
 
-    def _fit_exponential_smoothing(self, use_full_dataset: bool = False) -> CandidateModel:
+    def _fit_exponential_smoothing(self) -> CandidateModel:
         """
         Fits an exponential smoothing model using statsmodels's ExponentialSmoothing model
-        :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
-        subset training data
         :return: Currently returns a list where the first item is the error on the test set, the
         second is the exponential smoothing model, the third is the name of the model, and the
         fourth is the predictions made on the test set
@@ -219,7 +214,7 @@ class AutoTS:
 
         es_seasonal_period = self.seasonal_period
         if self.seasonal_period is not None:
-            es_seasonal_period = es_seasonal_period[0]  # es supports only 1 seasonality
+            es_seasonal_period = int(es_seasonal_period[0])  # es supports only 1 seasonality
 
         model = ExponentialSmoothing(
             self.data[self.series_column_name], seasonal_periods=es_seasonal_period, **self.exponential_smoothing_args
@@ -228,9 +223,7 @@ class AutoTS:
         test_predictions = pd.DataFrame(
             {
                 "actuals": self.data[self.series_column_name],
-                "es_test_predictions": model.predict(
-                    self.data.index[0], self.data.index[-1]
-                ),
+                "es_test_predictions": model.predict(self.data.index[0], self.data.index[-1]),
             }
         )
 
@@ -238,11 +231,9 @@ class AutoTS:
 
         return CandidateModel(error, model, "exponential_smoothing", test_predictions)
 
-    def _fit_tbats(self, use_full_dataset: bool = False) -> CandidateModel:
+    def _fit_tbats(self) -> CandidateModel:
         """
         Fits a BATS model using tbats's BATS model
-        :param use_full_dataset: Whether to use the full set of data provided during fit, or use the
-        subset training data
         :return: Currently returns a list where the first item is the error on the test set, the
         second is the BATS model, the third is the name of the model, and the
         fourth is the predictions made on the test set
