@@ -24,7 +24,7 @@ def test_accuracy(
     dataset_name: str,
     seasonality,
 ):
-    print(f"Starting accuracy test for dataset {dataset_name}")
+    print(f"Starting accuracy test for dataset [{dataset_name}]")
     model = AutoTS(seasonal_period=seasonality, verbose=2)
     model.fit(data=train_data, series_column_name="ts")
 
@@ -40,21 +40,21 @@ def test_accuracy(
         assert model.best_model_error < 0.4
         assert forecast_error < 0.8
         print(
-            f"Passed airline accuracy test with train error = {model.best_model_error:.3f} and "
+            f"Passed [airline] accuracy test with train error = {model.best_model_error:.3f} and "
             f"test error {forecast_error:.3f}"
         )
     elif dataset_name == "shampoo":
         assert model.best_model_error < 0.6
         assert forecast_error < 1.0
         print(
-            f"Passed shampoo accuracy test with train error = {model.best_model_error:.3f} and "
+            f"Passed [shampoo] accuracy test with train error = {model.best_model_error:.3f} and "
             f"test error {forecast_error:.3f}"
         )
     elif dataset_name == "gasoline":
         assert model.best_model_error < 0.5
         assert forecast_error < 1.5
         print(
-            f"Passed gasoline accuracy test with train error = {model.best_model_error:.3f} and "
+            f"Passed [gasoline] accuracy test with train error = {model.best_model_error:.3f} and "
             f"test error {forecast_error:.3f}"
         )
 
@@ -68,8 +68,8 @@ def test_date_ranges(
     models: Union[List[str], Tuple[str]] = None,
 ):
     print(
-        f"Starting date range test for dataset {dataset_name} with models {models} test "
-        f"start date {start_date} test end date {end_date}"
+        f"Starting date range test for dataset [{dataset_name}] with models [{models}] test "
+        f"start date [{start_date}] test end date [{end_date}]"
     )
     if models is not None:
         model = AutoTS(seasonal_period=seasonality, verbose=2, model_names=models)

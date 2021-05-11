@@ -163,7 +163,7 @@ class AutoTS:
                 supress_warning=True,
                 seasonal=self.is_seasonal,
                 m=auto_arima_seasonal_period,
-                exogenous=exog,
+                X=exog,
                 **self.auto_arima_args,
             )
 
@@ -182,7 +182,7 @@ class AutoTS:
                 supress_warning=True,
                 seasonal=self.is_seasonal,
                 m=auto_arima_seasonal_period,
-                exogenous=exog,
+                X=exog,
                 **self.auto_arima_args,
             )
 
@@ -306,7 +306,7 @@ class AutoTS:
         # start date and end date are both in-sample
         if end_date <= self.data.index[-1]:
             preds = self.fit_model.predict_in_sample(
-                start=self.data.index.get_loc(start_date), end=self.data.index.get_loc(end_date), exogenous=exogenous
+                start=self.data.index.get_loc(start_date), end=self.data.index.get_loc(end_date), X=exogenous
             )
 
         # start date is in-sample but end date is not
@@ -321,7 +321,7 @@ class AutoTS:
         # only possible scenario at this point is start date is 1 period past last data date
         else:
             periods_to_predict = len(pd.date_range(start=start_date, end=end_date, freq=self.freq))
-            preds = self.fit_model.predict(periods_to_predict, exogenous=exogenous)
+            preds = self.fit_model.predict(periods_to_predict, X=exogenous)
 
         return pd.Series(preds, index=pd.date_range(start_date, end_date, freq=self.freq))
 
@@ -450,7 +450,8 @@ class AutoTS:
             exogenous = pd.DataFrame(exogenous)
 
         # limit exogenous to dates that are specified by start and end date
-        exogenous = exogenous[exogenous.index.isin(list(self.prediction_index))]
+        if self.using_exogenous:
+            exogenous = exogenous[exogenous.index.isin(list(self.prediction_index))]
 
         if self.fit_model_type == "auto_arima":
             return self._predict_auto_arima(pred_start, pred_end, last_period, exogenous)
