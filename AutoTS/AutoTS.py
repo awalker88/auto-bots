@@ -413,7 +413,7 @@ class AutoTS:
         The series' will have a datetime index
         """
         if not self.is_fitted:
-            raise AttributeError("Model can not make prediction without first calling `.fit()`!")
+            raise AttributeError("Model can't make predictions without first calling `.fit()`!")
 
         val.validate_predict_dates(start, end)
         self._set_prediction_index(start, end)
