@@ -1,4 +1,6 @@
 from typing import Union, List, Tuple
+
+import numpy as np
 from dateutil.relativedelta import relativedelta
 import datetime as dt
 from time import time
@@ -7,6 +9,60 @@ import pandas as pd
 
 from AutoTS.AutoTS import AutoTS
 from AutoTS.utils.error_metrics import mase
+
+
+def main():
+    start_time = time()
+    airline = pd.read_csv("examples/airline_passengers/AirPassengers.csv")
+    airline["Month"] = pd.to_datetime(airline["Month"])
+    airline = airline.set_index("Month")
+    airline = airline.rename({"Passengers": "ts"}, axis="columns")
+    airline_train, airline_test = airline[:-12], airline[-12:]
+
+    shampoo = pd.read_csv("examples/shampoo/shampoo.csv")
+    shampoo["Month"] = pd.to_datetime(shampoo["Month"])
+    shampoo = shampoo.set_index("Month")
+    shampoo = shampoo.rename({"Sales": "ts"}, axis="columns")
+    shampoo['random_exog'] = np.random.randn(len(shampoo))  # random variable just to test exog works
+    shampoo_train, shampoo_test = shampoo[:30], shampoo[30:]
+
+    gasoline = pd.read_csv("examples/gasoline/gasoline.csv")
+    gasoline["week"] = pd.to_datetime(gasoline["week"])
+    gasoline = gasoline.set_index("week").sort_index()
+    gasoline = gasoline.rename({"barrels_of_gasoline": "ts"}, axis="columns")
+    gasoline_train, gasoline_test = gasoline[-156:-52], gasoline[-52:]  # limit 2 years to speed up modeling
+
+    model_sets = [["auto_arima"],
+                  # ["exponential_smoothing"],
+                  # ["tbats"],
+                  None]
+    airline_test_dates = [
+        [airline_train.index[-2], airline_test.index[-1]],
+        [airline_train.index[-2] + relativedelta(days=-1), airline_test.index[-1]],
+        [airline_test.index[0], airline_test.index[-1]],
+    ]
+    gasoline_test_dates = [
+        # [gasoline_train.index[-20], gasoline_test.index[-8]],
+        [gasoline_train.index[-2], gasoline_test.index[-1]],
+        [gasoline_train.index[-2] + relativedelta(days=-1), gasoline_test.index[-1]],
+        [gasoline_test.index[0], gasoline_test.index[-1]],
+    ]
+
+    seasonality_tests(airline)
+    test_accuracy(airline_train, airline_test, "airline", 12)
+    test_accuracy(shampoo_train, shampoo_test, "shampoo", 6)
+    test_accuracy(gasoline_train, gasoline_test, "gasoline", 52.179)
+    test_model_with_exog(shampoo, shampoo_train, shampoo_train.index[-2], shampoo_test.index[-1])
+
+    for model_set in model_sets:
+        for dates in airline_test_dates:
+            test_date_ranges(airline_train, "airline", 12, start_date=dates[0], end_date=dates[1], models=model_set)
+
+    for model_set in model_sets:
+        for dates in gasoline_test_dates:
+            test_date_ranges(gasoline_train, "gasoline", 52, start_date=dates[0], end_date=dates[1], models=model_set)
+
+    print(f"Completed testing in {time() - start_time:.1f} seconds")
 
 
 def seasonality_tests(data: pd.DataFrame):
@@ -77,53 +133,17 @@ def test_date_ranges(
         model = AutoTS(seasonal_period=seasonality, verbose=2)
     model.fit(data=train_data, series_column_name="ts")
     forecast = pd.Series(data=model.predict(start_date, end_date), name="forecast")
-    print("\tDate range test success")
+    print("\tDate range test successful")
+
+
+def test_model_with_exog(dataset, train, start_date, end_date):
+    print('Starting model test with exog')
+    model = AutoTS(seasonal_period=6, verbose=2, model_names=['auto_arima'])
+    model.fit(data=train, series_column_name='ts', exogenous='random_exog')
+    test_exog = dataset[dataset.index.isin(pd.date_range(start_date, end_date, freq='MS'))]['random_exog']
+    forecast = pd.Series(data=model.predict(start_date, end_date, exogenous=test_exog), name="forecast")
+    print('Exog test successful')
 
 
 if __name__ == "__main__":
-    start_time = time()
-    airline = pd.read_csv("../examples/airline_passengers/AirPassengers.csv")
-    airline["Month"] = pd.to_datetime(airline["Month"])
-    airline = airline.set_index("Month")
-    airline = airline.rename({"Passengers": "ts"}, axis="columns")
-    airline_train, airline_test = airline[:-12], airline[-12:]
-
-    shampoo = pd.read_csv("../examples/shampoo/shampoo.csv")
-    shampoo["Month"] = pd.to_datetime(shampoo["Month"])
-    shampoo = shampoo.set_index("Month")
-    shampoo = shampoo.rename({"Sales": "ts"}, axis="columns")
-    shampoo_train, shampoo_test = shampoo[:30], shampoo[30:]
-
-    gasoline = pd.read_csv("../examples/gasoline/gasoline.csv")
-    gasoline["week"] = pd.to_datetime(gasoline["week"])
-    gasoline = gasoline.set_index("week").sort_index()
-    gasoline = gasoline.rename({"barrels_of_gasoline": "ts"}, axis="columns")
-    gasoline_train, gasoline_test = gasoline[-156:-52], gasoline[-52:]  # limit 2 years to speed up modeling
-
-    model_sets = [["auto_arima"], ["exponential_smoothing"], ["tbats"], None]
-    airline_test_dates = [
-        [airline_train.index[-2], airline_test.index[-1]],
-        [airline_train.index[-2] + relativedelta(days=-1), airline_test.index[-1]],
-        [airline_test.index[0], airline_test.index[-1]],
-    ]
-    gasoline_test_dates = [
-        [gasoline_train.index[-20], gasoline_test.index[-8]],
-        [gasoline_train.index[-2], gasoline_test.index[-1]],
-        [gasoline_train.index[-2] + relativedelta(days=-1), gasoline_test.index[-1]],
-        [gasoline_test.index[0], gasoline_test.index[-1]],
-    ]
-
-    seasonality_tests(airline)
-    test_accuracy(airline_train, airline_test, "airline", 12)
-    test_accuracy(shampoo_train, shampoo_test, "shampoo", 6)
-    test_accuracy(gasoline_train, gasoline_test, "gasoline", 52.179)
-
-    for model_set in model_sets:
-        for dates in airline_test_dates:
-            test_date_ranges(airline_train, "airline", 12, start_date=dates[0], end_date=dates[1], models=model_set)
-
-    for model_set in model_sets:
-        for dates in gasoline_test_dates:
-            test_date_ranges(gasoline_train, "gasoline", 52, start_date=dates[0], end_date=dates[1], models=model_set)
-
-    print(f"Completed testing in {time() - start_time:.1f} seconds")
+    main()

@@ -313,9 +313,14 @@ class AutoTS:
         elif start_date < self.data.index[-1] < end_date:
             num_extra_periods = len(pd.date_range(start=last_data_date, end=end_date, freq=self.freq)) - 1
 
+            in_sample_exog, out_of_sample_exog = None, None
+            if self.using_exogenous:
+                in_sample_exog = exogenous.iloc[exogenous.index.get_loc(start_date): exogenous.index.get_loc(last_data_date) + 1]
+                out_of_sample_exog = exogenous.iloc[exogenous.index.get_loc(last_data_date) + 1:]
+
             # get all in sample predictions and stitch them together with out of sample predictions
-            in_sample_preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date))
-            out_of_sample_preds = self.fit_model.predict(num_extra_periods)
+            in_sample_preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date), exogenous=in_sample_exog)
+            out_of_sample_preds = self.fit_model.predict(num_extra_periods, exogenous=out_of_sample_exog)
             preds = np.concatenate([in_sample_preds, out_of_sample_preds])
 
         # only possible scenario at this point is start date is 1 period past last data date
@@ -444,6 +449,9 @@ class AutoTS:
                 "Exogenous regressor(s) must be provided as a dataframe since they were provided during training"
             )
 
+        if self.using_exogenous and not isinstance(exogenous.index, pd.DatetimeIndex):
+            raise ValueError('The index of your `exogenous` must be a series of datetimes')
+
         # auto_arima requires a dataframe for the exogenous argument. If user provides a series, go
         # ahead and make it a dataframe, just to be nice :)
         if isinstance(exogenous, pd.Series):
@@ -452,6 +460,12 @@ class AutoTS:
         # limit exogenous to dates that are specified by start and end date
         if self.using_exogenous:
             exogenous = exogenous[exogenous.index.isin(list(self.prediction_index))]
+
+        # check that, if the user fit models with exogenous regressors, exogenous contains all necessary dates
+        if self.using_exogenous and self.prediction_index.tolist() != exogenous.index.tolist():
+            raise ValueError(
+                f"Exogenous regressor(s) must contain all dates in your prediction interval. The following dates are missing: {[d for d in self.prediction_index.tolist() if d not in exogenous.index.tolist()]}"
+            )
 
         if self.fit_model_type == "auto_arima":
             return self._predict_auto_arima(pred_start, pred_end, last_period, exogenous)
