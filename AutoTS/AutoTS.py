@@ -28,14 +28,14 @@ class AutoTS:
     """
 
     def __init__(
-        self,
-        model_names: Union[Tuple[str], List[str]] = ("auto_arima", "exponential_smoothing", "tbats", "ensemble"),
-        error_metric: str = "mase",
-        seasonal_period: Union[int, float, List[int], List[float]] = None,
-        verbose: int = 0,
-        auto_arima_args: dict = None,
-        exponential_smoothing_args: dict = None,
-        tbats_args: dict = None,
+            self,
+            model_names: Union[Tuple[str], List[str]] = ("auto_arima", "exponential_smoothing", "tbats", "ensemble"),
+            error_metric: str = "mase",
+            seasonal_period: Union[int, float, List[int], List[float]] = None,
+            verbose: int = 0,
+            auto_arima_args: dict = None,
+            exponential_smoothing_args: dict = None,
+            tbats_args: dict = None,
     ):
         self.verbose = verbose
 
@@ -77,7 +77,7 @@ class AutoTS:
         warnings.filterwarnings("ignore", module="statsmodels")
 
     def fit(
-        self, data: pd.DataFrame, series_column_name: str, freq: str = "infer", exogenous: Union[str, list] = None
+            self, data: pd.DataFrame, series_column_name: str, freq: str = "infer", exogenous: Union[str, list] = None
     ) -> None:
         """
         Fit model to given training data.
@@ -163,7 +163,7 @@ class AutoTS:
                 supress_warning=True,
                 seasonal=self.is_seasonal,
                 m=auto_arima_seasonal_period,
-                X=exog,
+                exogenous=exog,
                 **self.auto_arima_args,
             )
 
@@ -182,7 +182,7 @@ class AutoTS:
                 supress_warning=True,
                 seasonal=self.is_seasonal,
                 m=auto_arima_seasonal_period,
-                X=exog,
+                exogenous=exog,
                 **self.auto_arima_args,
             )
 
@@ -296,17 +296,17 @@ class AutoTS:
             return rmse(data, predictions_column, actuals_column)
 
     def _predict_auto_arima(
-        self,
-        start_date: dt.datetime,
-        end_date: dt.datetime,
-        last_data_date: dt.datetime,
-        exogenous: pd.DataFrame = None,
+            self,
+            start_date: dt.datetime,
+            end_date: dt.datetime,
+            last_data_date: dt.datetime,
+            exogenous: pd.DataFrame = None,
     ) -> pd.Series:
         """Uses a fit ARIMA model to predict between the given dates"""
         # start date and end date are both in-sample
         if end_date <= self.data.index[-1]:
             preds = self.fit_model.predict_in_sample(
-                start=self.data.index.get_loc(start_date), end=self.data.index.get_loc(end_date), X=exogenous
+                start=self.data.index.get_loc(start_date), end=self.data.index.get_loc(end_date), exogenous=exogenous
             )
 
         # start date is in-sample but end date is not
@@ -326,7 +326,7 @@ class AutoTS:
         # only possible scenario at this point is start date is 1 period past last data date
         else:
             periods_to_predict = len(pd.date_range(start=start_date, end=end_date, freq=self.freq))
-            preds = self.fit_model.predict(periods_to_predict, X=exogenous)
+            preds = self.fit_model.predict(periods_to_predict, exogenous=exogenous)
 
         return pd.Series(preds, index=pd.date_range(start_date, end_date, freq=self.freq))
 
@@ -359,7 +359,7 @@ class AutoTS:
         return pd.Series(preds, index=pd.date_range(start=start_date, end=end_date, freq=self.freq))
 
     def _predict_ensemble(
-        self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime, exogenous: pd.DataFrame
+            self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime, exogenous: pd.DataFrame
     ) -> pd.Series:
         """Uses all other fit models to predict between the given dates and averages them"""
         ensemble_model_predictions = []
@@ -404,7 +404,7 @@ class AutoTS:
         )
 
     def predict(
-        self, start: Union[dt.datetime, str], end: Union[dt.datetime, str], exogenous: pd.DataFrame = None
+            self, start: Union[dt.datetime, str], end: Union[dt.datetime, str], exogenous: pd.DataFrame = None
     ) -> pd.Series:
         """
         Generates predictions (forecasts) for dates between start and end (inclusive).

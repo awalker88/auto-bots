@@ -75,10 +75,10 @@ def seasonality_tests(data: pd.DataFrame):
 
 
 def test_accuracy(
-    train_data: pd.DataFrame,
-    test_data: pd.DataFrame,
-    dataset_name: str,
-    seasonality,
+        train_data: pd.DataFrame,
+        test_data: pd.DataFrame,
+        dataset_name: str,
+        seasonality,
 ):
     print(f"Starting accuracy test for dataset [{dataset_name}]")
     model = AutoTS(seasonal_period=seasonality, verbose=2)
@@ -116,12 +116,12 @@ def test_accuracy(
 
 
 def test_date_ranges(
-    train_data: pd.DataFrame,
-    dataset_name: str,
-    seasonality: Union[int, List[int]],
-    start_date: dt.datetime,
-    end_date: dt.datetime,
-    models: Union[List[str], Tuple[str]] = None,
+        train_data: pd.DataFrame,
+        dataset_name: str,
+        seasonality: Union[int, List[int]],
+        start_date: dt.datetime,
+        end_date: dt.datetime,
+        models: Union[List[str], Tuple[str]] = None,
 ):
     print(
         f"Starting date range test for dataset [{dataset_name}] with models [{models}] test "
