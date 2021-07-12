@@ -10,9 +10,9 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 from tbats import BATS
 
-from AutoTS.utils.error_metrics import mase, mse, rmse
-from AutoTS.utils import validation as val
-from AutoTS.utils.CandidateModel import CandidateModel
+from auto_bots.utils.error_metrics import mase, mse, rmse
+from auto_bots.utils import validation as val
+from auto_bots.utils.CandidateModel import CandidateModel
 
 
 class AutoTS:
@@ -28,14 +28,19 @@ class AutoTS:
     """
 
     def __init__(
-            self,
-            model_names: Union[Tuple[str], List[str]] = ("auto_arima", "exponential_smoothing", "tbats", "ensemble"),
-            error_metric: str = "mase",
-            seasonal_period: Union[int, float, List[int], List[float]] = None,
-            verbose: int = 0,
-            auto_arima_args: dict = None,
-            exponential_smoothing_args: dict = None,
-            tbats_args: dict = None,
+        self,
+        model_names: Union[Tuple[str], List[str]] = (
+            "auto_arima",
+            "exponential_smoothing",
+            "tbats",
+            "ensemble",
+        ),
+        error_metric: str = "mase",
+        seasonal_period: Union[int, float, List[int], List[float]] = None,
+        verbose: int = 0,
+        auto_arima_args: dict = None,
+        exponential_smoothing_args: dict = None,
+        tbats_args: dict = None,
     ):
         self.verbose = verbose
 
@@ -77,7 +82,11 @@ class AutoTS:
         warnings.filterwarnings("ignore", module="statsmodels")
 
     def fit(
-            self, data: pd.DataFrame, series_column_name: str, freq: str = "infer", exogenous: Union[str, list] = None
+        self,
+        data: pd.DataFrame,
+        series_column_name: str,
+        freq: str = "infer",
+        exogenous: Union[str, list] = None,
     ) -> None:
         """
         Fit model to given training data.
@@ -116,21 +125,29 @@ class AutoTS:
         if "auto_arima" in self.model_names:
             self.candidate_models.append(self._fit_auto_arima())
             if self.verbose >= 1:
-                print(f"\tTrained auto_arima model with error {self.candidate_models[-1].error:.4f}")
+                print(
+                    f"\tTrained auto_arima model with error {self.candidate_models[-1].error:.4f}"
+                )
         if "exponential_smoothing" in self.model_names:
             self.candidate_models.append(self._fit_exponential_smoothing())
             if self.verbose >= 1:
-                print(f"\tTrained exponential_smoothing model with error {self.candidate_models[-1].error:.4f}")
+                print(
+                    f"\tTrained exponential_smoothing model with error {self.candidate_models[-1].error:.4f}"
+                )
         if "tbats" in self.model_names:
             self.candidate_models.append(self._fit_tbats())
             if self.verbose >= 1:
-                print(f"\tTrained tbats model with error {self.candidate_models[-1].error:.4f}")
+                print(
+                    f"\tTrained tbats model with error {self.candidate_models[-1].error:.4f}"
+                )
         if "ensemble" in self.model_names:
             if self.candidate_models is None:
                 raise ValueError("No candidate models to ensemble")
             self.candidate_models.append(self._fit_ensemble())
             if self.verbose >= 1:
-                print(f"\tTrained ensemble model with error {self.candidate_models[-1].error:.4f}")
+                print(
+                    f"\tTrained ensemble model with error {self.candidate_models[-1].error:.4f}"
+                )
 
         self.candidate_models = sorted(self.candidate_models, key=lambda x: x.error)
         self.best_model_error = self.candidate_models[0].error
@@ -151,7 +168,9 @@ class AutoTS:
 
         auto_arima_seasonal_period = self.seasonal_period
         if self.seasonal_period is None:
-            auto_arima_seasonal_period = 1  # need to use auto_arima default if there's no seasonality defined
+            auto_arima_seasonal_period = (
+                1  # need to use auto_arima default if there's no seasonality defined
+            )
         else:
             # since auto_arima supports only 1 seasonality, select the first one as "main" seasonality
             auto_arima_seasonal_period = int(auto_arima_seasonal_period[0])
@@ -172,9 +191,17 @@ class AutoTS:
         # Canova-Hansen test for seasonal differencing instead
         except ValueError:
             if self.verbose >= 2:
-                print("\tSeasonal differencing for auto_arima failed. Trying Canova-Hansen method.")
-            if "seasonal_test" in self.auto_arima_args.keys() and self.auto_arima_args["seasonal_test"] == "ocsb":
-                warnings.warn('Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors', UserWarning)
+                print(
+                    "\tSeasonal differencing for auto_arima failed. Trying Canova-Hansen method."
+                )
+            if (
+                "seasonal_test" in self.auto_arima_args.keys()
+                and self.auto_arima_args["seasonal_test"] == "ocsb"
+            ):
+                warnings.warn(
+                    'Forcing `seasonal_test="ch"` as "ocsb" occasionally causes numpy errors',
+                    UserWarning,
+                )
             self.auto_arima_args["seasonal_test"] = "ch"
             model = auto_arima(
                 self.data[self.series_column_name],
@@ -193,7 +220,9 @@ class AutoTS:
             }
         )
 
-        test_error = self._error_metric(test_predictions, "aa_test_predictions", "actuals")
+        test_error = self._error_metric(
+            test_predictions, "aa_test_predictions", "actuals"
+        )
 
         return CandidateModel(test_error, model, "auto_arima", test_predictions)
 
@@ -208,20 +237,28 @@ class AutoTS:
         if "trend" not in self.exponential_smoothing_args.keys():
             self.exponential_smoothing_args["trend"] = "add"
         if "seasonal" not in self.exponential_smoothing_args.keys():
-            self.exponential_smoothing_args["seasonal"] = "add" if self.seasonal_period is not None else None
+            self.exponential_smoothing_args["seasonal"] = (
+                "add" if self.seasonal_period is not None else None
+            )
 
         es_seasonal_period = self.seasonal_period
         if self.seasonal_period is not None:
-            es_seasonal_period = int(es_seasonal_period[0])  # es supports only 1 seasonality
+            es_seasonal_period = int(
+                es_seasonal_period[0]
+            )  # es supports only 1 seasonality
 
         model = ExponentialSmoothing(
-            self.data[self.series_column_name], seasonal_periods=es_seasonal_period, **self.exponential_smoothing_args
+            self.data[self.series_column_name],
+            seasonal_periods=es_seasonal_period,
+            **self.exponential_smoothing_args,
         ).fit()
 
         test_predictions = pd.DataFrame(
             {
                 "actuals": self.data[self.series_column_name],
-                "es_test_predictions": model.predict(self.data.index[0], self.data.index[-1]),
+                "es_test_predictions": model.predict(
+                    self.data.index[0], self.data.index[-1]
+                ),
             }
         )
 
@@ -246,7 +283,11 @@ class AutoTS:
         if "use_arma_errors" not in self.tbats_args.keys():
             self.tbats_args["use_arma_errors"] = False  # helps speed up modeling a bit
 
-        model = BATS(seasonal_periods=tbats_seasonal_periods, use_box_cox=False, **self.tbats_args)
+        model = BATS(
+            seasonal_periods=tbats_seasonal_periods,
+            use_box_cox=False,
+            **self.tbats_args,
+        )
         fit_model = model.fit(self.data[self.series_column_name])
 
         test_predictions = pd.DataFrame(
@@ -261,26 +302,39 @@ class AutoTS:
 
     def _fit_ensemble(self) -> CandidateModel:
         """
-        Fits a model that is the ensemble of all other models specified during AutoTS's initialization
+        Fits a model that is the ensemble of all other models specified during auto_bots's initialization
         :return: Currently returns a list where the first item is the error on the test set, the
         second is the exponential smoothing model, the third is the name of the model, and the
         fourth is the predictions made on the test set
         """
-        model_predictions = [candidate.predictions for candidate in self.candidate_models]
+        model_predictions = [
+            candidate.predictions for candidate in self.candidate_models
+        ]
         all_predictions = reduce(
             lambda left, right: pd.merge(
-                left, right.drop("actuals", axis="columns"), left_index=True, right_index=True
+                left,
+                right.drop("actuals", axis="columns"),
+                left_index=True,
+                right_index=True,
             ),
             model_predictions,
         )
-        predictions_columns = [col for col in all_predictions.columns if str(col).endswith("predictions")]
-        all_predictions["en_test_predictions"] = all_predictions[predictions_columns].mean(axis="columns")
+        predictions_columns = [
+            col for col in all_predictions.columns if str(col).endswith("predictions")
+        ]
+        all_predictions["en_test_predictions"] = all_predictions[
+            predictions_columns
+        ].mean(axis="columns")
 
         error = self._error_metric(all_predictions, "en_test_predictions", "actuals")
 
-        return CandidateModel(error, None, "ensemble", all_predictions[["actuals", "en_test_predictions"]])
+        return CandidateModel(
+            error, None, "ensemble", all_predictions[["actuals", "en_test_predictions"]]
+        )
 
-    def _error_metric(self, data: pd.DataFrame, predictions_column: str, actuals_column: str) -> float:
+    def _error_metric(
+        self, data: pd.DataFrame, predictions_column: str, actuals_column: str
+    ) -> float:
         """
         Computes error using the error metric specified during initialization
         :param data: pandas dataframe containing predictions and actuals
@@ -296,57 +350,92 @@ class AutoTS:
             return rmse(data, predictions_column, actuals_column)
 
     def _predict_auto_arima(
-            self,
-            start_date: dt.datetime,
-            end_date: dt.datetime,
-            last_data_date: dt.datetime,
-            exogenous: pd.DataFrame = None,
+        self,
+        start_date: dt.datetime,
+        end_date: dt.datetime,
+        last_data_date: dt.datetime,
+        exogenous: pd.DataFrame = None,
     ) -> pd.Series:
         """Uses a fit ARIMA model to predict between the given dates"""
         # start date and end date are both in-sample
         if end_date <= self.data.index[-1]:
             preds = self.fit_model.predict_in_sample(
-                start=self.data.index.get_loc(start_date), end=self.data.index.get_loc(end_date), exogenous=exogenous
+                start=self.data.index.get_loc(start_date),
+                end=self.data.index.get_loc(end_date),
+                exogenous=exogenous,
             )
 
         # start date is in-sample but end date is not
         elif start_date < self.data.index[-1] < end_date:
-            num_extra_periods = len(pd.date_range(start=last_data_date, end=end_date, freq=self.freq)) - 1
+            num_extra_periods = (
+                len(pd.date_range(start=last_data_date, end=end_date, freq=self.freq))
+                - 1
+            )
 
             in_sample_exog, out_of_sample_exog = None, None
             if self.using_exogenous:
-                in_sample_exog = exogenous.iloc[exogenous.index.get_loc(start_date): exogenous.index.get_loc(last_data_date) + 1]
-                out_of_sample_exog = exogenous.iloc[exogenous.index.get_loc(last_data_date) + 1:]
+                in_sample_exog = exogenous.iloc[
+                    exogenous.index.get_loc(start_date) : exogenous.index.get_loc(
+                        last_data_date
+                    )
+                    + 1
+                ]
+                out_of_sample_exog = exogenous.iloc[
+                    exogenous.index.get_loc(last_data_date) + 1 :
+                ]
 
             # get all in sample predictions and stitch them together with out of sample predictions
-            in_sample_preds = self.fit_model.predict_in_sample(start=self.data.index.get_loc(start_date), exogenous=in_sample_exog)
-            out_of_sample_preds = self.fit_model.predict(num_extra_periods, exogenous=out_of_sample_exog)
+            in_sample_preds = self.fit_model.predict_in_sample(
+                start=self.data.index.get_loc(start_date), exogenous=in_sample_exog
+            )
+            out_of_sample_preds = self.fit_model.predict(
+                num_extra_periods, exogenous=out_of_sample_exog
+            )
             preds = np.concatenate([in_sample_preds, out_of_sample_preds])
 
         # only possible scenario at this point is start date is 1 period past last data date
         else:
-            periods_to_predict = len(pd.date_range(start=start_date, end=end_date, freq=self.freq))
+            periods_to_predict = len(
+                pd.date_range(start=start_date, end=end_date, freq=self.freq)
+            )
             preds = self.fit_model.predict(periods_to_predict, exogenous=exogenous)
 
-        return pd.Series(preds, index=pd.date_range(start_date, end_date, freq=self.freq))
+        return pd.Series(
+            preds, index=pd.date_range(start_date, end_date, freq=self.freq)
+        )
 
-    def _predict_exponential_smoothing(self, start_date: dt.datetime, end_date: dt.datetime) -> pd.Series:
+    def _predict_exponential_smoothing(
+        self, start_date: dt.datetime, end_date: dt.datetime
+    ) -> pd.Series:
         """Uses a fit exponential smoothing model to predict between the given dates"""
         return self.fit_model.predict(start=start_date, end=end_date)
 
-    def _predict_tbats(self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime) -> pd.Series:
+    def _predict_tbats(
+        self,
+        start_date: dt.datetime,
+        end_date: dt.datetime,
+        last_data_date: dt.datetime,
+    ) -> pd.Series:
         """Uses a fit BATS model to predict between the given dates"""
         in_sample_preds = pd.Series(
-            self.fit_model.y_hat, index=pd.date_range(start=self.data.index[0], end=self.data.index[-1], freq=self.freq)
+            self.fit_model.y_hat,
+            index=pd.date_range(
+                start=self.data.index[0], end=self.data.index[-1], freq=self.freq
+            ),
         )
 
         # start date and end date are both in-sample
         if end_date <= in_sample_preds.index[-1]:
-            preds = in_sample_preds.loc[self.prediction_index[0] : self.prediction_index[-1]]
+            preds = in_sample_preds.loc[
+                self.prediction_index[0] : self.prediction_index[-1]
+            ]
 
         # start date is in-sample but end date is not
         elif start_date < self.data.index[-1] < end_date:
-            num_extra_periods = len(pd.date_range(start=last_data_date, end=end_date, freq=self.freq)) - 1
+            num_extra_periods = (
+                len(pd.date_range(start=last_data_date, end=end_date, freq=self.freq))
+                - 1
+            )
             # get all in sample predictions and stitch them together with out of sample predictions
             in_sample_portion = in_sample_preds.loc[start_date:]
             out_of_sample_portion = self.fit_model.forecast(num_extra_periods)
@@ -356,10 +445,16 @@ class AutoTS:
         else:
             preds = self.fit_model.forecast(len(self.prediction_index))
 
-        return pd.Series(preds, index=pd.date_range(start=start_date, end=end_date, freq=self.freq))
+        return pd.Series(
+            preds, index=pd.date_range(start=start_date, end=end_date, freq=self.freq)
+        )
 
     def _predict_ensemble(
-            self, start_date: dt.datetime, end_date: dt.datetime, last_data_date: dt.datetime, exogenous: pd.DataFrame
+        self,
+        start_date: dt.datetime,
+        end_date: dt.datetime,
+        last_data_date: dt.datetime,
+        exogenous: pd.DataFrame,
     ) -> pd.Series:
         """Uses all other fit models to predict between the given dates and averages them"""
         ensemble_model_predictions = []
@@ -370,7 +465,9 @@ class AutoTS:
             for candidate in self.candidate_models:
                 if candidate.model_type == "auto_arima":
                     self.fit_model = candidate.fit_model
-            preds = self._predict_auto_arima(start_date, end_date, last_data_date, exogenous)
+            preds = self._predict_auto_arima(
+                start_date, end_date, last_data_date, exogenous
+            )
             preds = preds.rename("auto_arima_predictions")
             ensemble_model_predictions.append(preds)
 
@@ -391,7 +488,10 @@ class AutoTS:
             ensemble_model_predictions.append(preds)
 
         all_predictions = reduce(
-            lambda left, right: pd.merge(left, right, left_index=True, right_index=True), ensemble_model_predictions
+            lambda left, right: pd.merge(
+                left, right, left_index=True, right_index=True
+            ),
+            ensemble_model_predictions,
         )
         all_predictions["en_test_predictions"] = all_predictions.mean(axis="columns")
 
@@ -404,7 +504,10 @@ class AutoTS:
         )
 
     def predict(
-            self, start: Union[dt.datetime, str], end: Union[dt.datetime, str], exogenous: pd.DataFrame = None
+        self,
+        start: Union[dt.datetime, str],
+        end: Union[dt.datetime, str],
+        exogenous: pd.DataFrame = None,
     ) -> pd.Series:
         """
         Generates predictions (forecasts) for dates between start and end (inclusive).
@@ -418,7 +521,9 @@ class AutoTS:
         The series' will have a datetime index
         """
         if not self.is_fitted:
-            raise AttributeError("Model can't make predictions without first calling `.fit()`!")
+            raise AttributeError(
+                "Model can't make predictions without first calling `.fit()`!"
+            )
 
         val.validate_predict_dates(start, end)
         self._set_prediction_index(start, end)
@@ -427,7 +532,9 @@ class AutoTS:
 
         last_period = self.data.index[-1]
         # check that start date is before or right after that last date given during training
-        latest_valid_start = pd.date_range(self.data.index[-1], periods=2, freq=self.data.index.inferred_freq)[-1]
+        latest_valid_start = pd.date_range(
+            self.data.index[-1], periods=2, freq=self.data.index.inferred_freq
+        )[-1]
         if pred_start > latest_valid_start:
             raise ValueError(
                 f"`start` must be no more than 1 period past the last date of data received"
@@ -450,7 +557,9 @@ class AutoTS:
             )
 
         if self.using_exogenous and not isinstance(exogenous.index, pd.DatetimeIndex):
-            raise ValueError('The index of your `exogenous` must be a series of datetimes')
+            raise ValueError(
+                "The index of your `exogenous` must be a series of datetimes"
+            )
 
         # auto_arima requires a dataframe for the exogenous argument. If user provides a series, go
         # ahead and make it a dataframe, just to be nice :)
@@ -462,13 +571,18 @@ class AutoTS:
             exogenous = exogenous[exogenous.index.isin(list(self.prediction_index))]
 
         # check that, if the user fit models with exogenous regressors, exogenous contains all necessary dates
-        if self.using_exogenous and self.prediction_index.tolist() != exogenous.index.tolist():
+        if (
+            self.using_exogenous
+            and self.prediction_index.tolist() != exogenous.index.tolist()
+        ):
             raise ValueError(
                 f"Exogenous regressor(s) must contain all dates in your prediction interval. The following dates are missing: {[d for d in self.prediction_index.tolist() if d not in exogenous.index.tolist()]}"
             )
 
         if self.fit_model_type == "auto_arima":
-            return self._predict_auto_arima(pred_start, pred_end, last_period, exogenous)
+            return self._predict_auto_arima(
+                pred_start, pred_end, last_period, exogenous
+            )
 
         if self.fit_model_type == "exponential_smoothing":
             return self._predict_exponential_smoothing(pred_start, pred_end)
@@ -479,7 +593,9 @@ class AutoTS:
         if self.fit_model_type == "ensemble":
             return self._predict_ensemble(pred_start, pred_end, last_period, exogenous)
 
-    def _set_prediction_index(self, start: Union[dt.datetime, str], end: Union[dt.datetime, str]):
+    def _set_prediction_index(
+        self, start: Union[dt.datetime, str], end: Union[dt.datetime, str]
+    ):
         self.prediction_index = pd.date_range(start, end, freq=self.freq)
         if start != self.prediction_index[0]:
             warnings.warn(

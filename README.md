@@ -8,23 +8,11 @@ You can install `auto-bots` with a simple
 pip install auto-bots
 ```
 
-```
-pandas
-pmdarima==1.71
-statsmodels==0.11.1
-tbats=1.1.0
-```
-Put the AutoTS folder in your repository. Then, to use the AutoTS model in your code, import it like so:
+Then, to use the AutoTS model in your code, import it like so:
 ```python
-from AutoTS.AutoTS import AutoTS
+from auto_bots.AutoTS import AutoTS
 ```
-<sub><sup>It's a lot of AutoTS's, I know</sup></sub>
 
-You may need to add some more to the import statement if you put the AutoTS folder inside another folder.
-For example, if you put it in a folder named "src" inside your repo, it might need to look more like this:
-```python
-from src.AutoTS.AutoTS import AutoTS
-```
 
 # Quickstart
 

@@ -7,8 +7,8 @@ from time import time
 
 import pandas as pd
 
-from AutoTS.AutoTS import AutoTS
-from AutoTS.utils.error_metrics import mase
+from auto_bots.AutoTS import AutoTS
+from auto_bots.utils.error_metrics import mase
 
 
 def main():

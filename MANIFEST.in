@@ -1,1 +1,1 @@
-recursive-include AutoTS/ *.py
+recursive-include auto_bots/ *.py
